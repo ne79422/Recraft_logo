@@ -15,58 +15,63 @@ const RECRAFT_TOKEN = process.env.RECRAFT_API_TOKEN;
 
 // 4개 시안의 "모티프 결합 방식"
 const VARIANTS = {
-  A: "direct motif combination — take the core motif literally and combine with brand concept",
-  B: "pure geometric abstraction — reduce the concept to basic shapes, lines, and proportions only",
+  A: "direct motif combination — take the core motif literally and merge it with the brand concept",
+  B: "pure geometric abstraction — reduce the concept to basic shapes, lines and proportions only",
   C: "adjacent motif substitution — use a related or implied motif that hints at the concept indirectly",
   D: "multi-concept compression — compress multiple brand values into a single unified form",
 };
 
+// ── 색상: hex → Recraft controls.colors 구조 (RGB 배열) ──
+// ★ 개선 #3: 색을 프롬프트 텍스트가 아니라 구조화 파라미터로 전달 → 색이 탁해지지 않음
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec((hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { rgb: [(n >> 16) & 255, (n >> 8) & 255, n & 255] };
+}
+
+// ── 프롬프트: 짧고 긍정적으로 ──
+// ★ 개선 #5: 부정문 범벅 긴 단락 대신, style이 벡터 룩을 책임지고 프롬프트는 핵심 의미만
 function buildPrompt(b, key) {
-  const colors = [b.primaryHex, b.secondaryHex, ...(b.refColors || [])]
-    .filter(Boolean).slice(0, 3).join(", ");
   return [
-    // 역할 + 절대 규칙
-    "You are a luxury brand symbol designer. Design a SYMBOL MARK ONLY — absolutely NO text, NO letters, NO numbers, NO wordmarks, NO captions anywhere in the image.",
-
-    // 브랜드 입력
-    `Brand concept: ${b.brandConcept || "a clean, modern, premium brand"}.`,
-
-    // 시안별 모티프 결합 방식
-    `Design approach for variant ${key}: ${VARIANTS[key]}.`,
-
-    // 색상
-    `Colors (use 1–2 only, avoid gradients): ${colors || "#003894"}. No rainbow, no neon, no metallic shine.`,
-
-    // 핵심 원칙
-    "Core principles: (1) Meaning first — derive form from a single compressed concept, not from aesthetics. (2) Color restraint — 1–2 colors maximum. (3) Generous whitespace — do not fill the frame. (4) Vector precision — clean edges that hold at any size. (5) Silhouette readability — the form must be instantly identifiable without color.",
-
-    // 스타일 방향
-    "Style: Choose ONE direction — painterly mark (simplified silhouette of motif), geometric abstraction (pure shapes and proportion), or negative space (second meaning hidden in whitespace). Keep detail minimal within the chosen direction.",
-
-    // 금지
-    "Strictly avoid: all text or glyphs, gradient overuse, 3D effects, metallic gloss, photo realism, clipart clichés, over-detail, neon/rainbow colors.",
-
-    // 품질 기준
-    "Quality check before finalizing: Does the form convey its meaning without text? Is it readable at 16px icon size? Does it retain identity in single color? Can you explain the form's reason in one sentence? Does it feel premium and desirable?",
-
-    // 사용자 추가 요청
-    b.userPrompt ? `USER PRIORITY REQUEST (override all above if conflicting): ${b.userPrompt}.` : "",
+    `A single premium logo symbol mark representing: ${b.brandConcept || "a clean, modern, premium brand"}.`,
+    `Design approach: ${VARIANTS[key]}.`,
+    "Flat vector illustration, bold geometric silhouette, one or two solid colors, generous negative space, centered, crisp clean edges, minimal detail.",
+    "Iconic, premium, instantly recognizable as a single mark. No text, no letters, no numbers, no words.",
+    b.userPrompt ? `Priority request (follow this above all): ${b.userPrompt}.` : "",
   ].filter(Boolean).join(" ");
 }
 
-async function recraftOne(prompt) {
+async function recraftOne(prompt, brief) {
+  // ★ 개선 #3: 브랜드 색을 controls.colors 로 (최대 3색)
+  const colors = [brief.primaryHex, brief.secondaryHex, ...(brief.refColors || [])]
+    .map(hexToRgb)
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const body = {
+    prompt,
+    model: "recraftv3",            // ★ 개선 #2: 유효한 모델명 (이전 "recraftv4_vector"는 존재하지 않음)
+    style: "vector_illustration",  // ★ 개선 #1: 벡터 스타일 = 웹앱 고퀄의 핵심
+    size: "1024x1024",
+    n: 1,
+  };
+  if (colors.length) body.controls = { colors };
+
+  // ★ 개선 #4(선택): 참고이미지로 만든 커스텀 스타일이 있으면 style_id 우선 적용
+  //   (RECRAFT_STYLE_ID 환경변수에 넣으면 style 대신 그 스타일을 사용)
+  if (process.env.RECRAFT_STYLE_ID) {
+    delete body.style;
+    body.style_id = process.env.RECRAFT_STYLE_ID;
+  }
+
   const r = await fetch("https://external.api.recraft.ai/v1/images/generations", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${RECRAFT_TOKEN}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      prompt,
-      model: "recraftv4_vector",
-      size: "1024x1024",
-      n: 1,
-    }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error("recraft " + r.status + " " + (await r.text()));
   const j = await r.json();
@@ -79,7 +84,7 @@ app.post("/api/generate-logos", async (req, res) => {
     const brief = req.body || {};
     const keys = ["A", "B", "C", "D"];
     const urls = await Promise.all(
-      keys.map((k) => recraftOne(buildPrompt(brief, k)).catch(() => null))
+      keys.map((k) => recraftOne(buildPrompt(brief, k), brief).catch(() => null))
     );
     res.json({ images: { A: urls[0], B: urls[1], C: urls[2], D: urls[3] } });
   } catch (e) {
