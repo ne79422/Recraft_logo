@@ -82,7 +82,20 @@ async function callRecraft(body) {
     throw err;
   }
   const j = await r.json();
-  return j.data?.[0]?.image_url || j.data?.[0]?.url || null;
+  const url = j.data?.[0]?.image_url || j.data?.[0]?.url || null;
+  if (!url) return null;
+  // ★ 만료되는 signed URL → 서버에서 즉시 다운로드해 data URI(base64)로 변환 (영구 보존, 흰 화면 방지)
+  try {
+    const imgRes = await fetch(url);
+    if (imgRes.ok) {
+      const ct = imgRes.headers.get("content-type") || "image/png";
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      return `data:${ct};base64,${buf.toString("base64")}`;
+    }
+  } catch (e) {
+    console.error("[image fetch→dataURI 실패, URL 그대로 반환]", String(e));
+  }
+  return url;
 }
 
 async function recraftOne(prompt, brief) {
