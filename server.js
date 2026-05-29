@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());                       // 운영 시 origin을 본인 도메인으로 제한 권장
 app.use(express.json({ limit: "8mb" }));
 
-const RECRAFT_TOKEN = process.env.RECRAFT_API_TOKEN;
+const RECRAFT_TOKEN = (process.env.RECRAFT_API_TOKEN || "").trim();
 
 // 4개 시안의 "모티프 결합 방식"
 const VARIANTS = {
@@ -43,7 +43,7 @@ function buildPrompt(b, key) {
 }
 
 function buildBody(prompt, brief) {
-  const styleId = process.env.RECRAFT_STYLE_ID;
+  const styleId = (process.env.RECRAFT_STYLE_ID || "").trim();
 
   // ★ 커스텀 스타일(style_id) 사용 시: prompt + style_id 만! (model·style·controls 동시 전송 금지 → 400 에러)
   if (styleId) {
@@ -103,13 +103,35 @@ app.get("/", (_req, res) => res.send("logo-gen backend OK"));
 
 // ── 진단용: 브라우저에서 https://...onrender.com/api/test 접속하면 실제 결과/에러를 JSON으로 보여줌 ──
 app.get("/api/test", async (_req, res) => {
+  const rawStyleId = process.env.RECRAFT_STYLE_ID || "";
+  const styleId = rawStyleId.trim();
   const info = {
     hasToken: !!RECRAFT_TOKEN,
-    hasStyleId: !!process.env.RECRAFT_STYLE_ID,
-    styleIdPreview: process.env.RECRAFT_STYLE_ID
-      ? process.env.RECRAFT_STYLE_ID.slice(0, 8) + "..."
-      : null,
+    tokenLength: RECRAFT_TOKEN.length,
+    hasStyleId: !!styleId,
+    styleIdPreview: styleId ? styleId.slice(0, 8) + "..." : null,
+    styleIdLength: styleId.length,
+    styleIdHadWhitespace: rawStyleId !== styleId,   // ← 공백/줄바꿈 있었는지
   };
+
+  // ① 먼저 "이 토큰으로 이 스타일에 접근 가능한지" 직접 확인
+  if (styleId) {
+    try {
+      const sr = await fetch("https://external.api.recraft.ai/v1/styles/" + styleId, {
+        headers: { "Authorization": `Bearer ${RECRAFT_TOKEN}` },
+      });
+      const stxt = await sr.text();
+      info.styleLookup = {
+        httpStatus: sr.status,
+        found: sr.ok,
+        body: (() => { try { return JSON.parse(stxt); } catch { return stxt; } })(),
+      };
+    } catch (e) {
+      info.styleLookup = { error: String(e) };
+    }
+  }
+
+  // ② 실제 이미지 생성 테스트
   try {
     const body = buildBody(
       "A single premium logo symbol mark of a friendly bear, flat vector, bold silhouette.",
