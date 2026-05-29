@@ -42,15 +42,15 @@ function buildPrompt(b, key) {
   ].filter(Boolean).join(" ");
 }
 
-function buildBody(prompt, brief) {
+function buildBody(prompt, brief, { useStyleId = true } = {}) {
   const styleId = (process.env.RECRAFT_STYLE_ID || "").trim();
 
   // ★ 커스텀 스타일(style_id) 사용 시: prompt + style_id 만! (model·style·controls 동시 전송 금지 → 400 에러)
-  if (styleId) {
+  if (styleId && useStyleId) {
     return { prompt, style_id: styleId, size: "1024x1024", n: 1 };
   }
 
-  // ★ 일반 모드: 벡터 스타일 + 브랜드 색
+  // ★ 일반 모드(또는 style_id 폴백): 벡터 스타일 + 브랜드 색
   const colors = [brief.primaryHex, brief.secondaryHex, ...(brief.refColors || [])]
     .map(hexToRgb)
     .filter(Boolean)
@@ -66,8 +66,8 @@ function buildBody(prompt, brief) {
   return body;
 }
 
-async function recraftOne(prompt, brief) {
-  const body = buildBody(prompt, brief);
+// Recraft 호출 (실패 시 에러 throw)
+async function callRecraft(body) {
   const r = await fetch("https://external.api.recraft.ai/v1/images/generations", {
     method: "POST",
     headers: {
@@ -78,11 +78,28 @@ async function recraftOne(prompt, brief) {
   });
   if (!r.ok) {
     const txt = await r.text();
-    console.error("[recraft error]", r.status, txt);   // ← Render Logs에 에러 표시
-    throw new Error("recraft " + r.status + " " + txt);
+    const err = new Error("recraft " + r.status + " " + txt);
+    err.status = r.status;
+    err.bodyText = txt;
+    throw err;
   }
   const j = await r.json();
   return j.data?.[0]?.image_url || null;
+}
+
+async function recraftOne(prompt, brief) {
+  const styleId = (process.env.RECRAFT_STYLE_ID || "").trim();
+  // ① 커스텀 스타일이 있으면 먼저 시도
+  if (styleId) {
+    try {
+      return await callRecraft(buildBody(prompt, brief, { useStyleId: true }));
+    } catch (e) {
+      // 스타일을 못 찾으면(404/접근불가 등) → vector_illustration으로 자동 폴백
+      console.error("[style_id 실패 → vector_illustration 폴백]", e.status, e.bodyText || e.message);
+    }
+  }
+  // ② 일반 벡터 스타일 (폴백 또는 기본)
+  return await callRecraft(buildBody(prompt, brief, { useStyleId: false }));
 }
 
 // 프론트(brand brief.html)가 호출하는 단일 엔드포인트
