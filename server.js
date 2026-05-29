@@ -15,23 +15,42 @@ const RECRAFT_TOKEN = process.env.RECRAFT_API_TOKEN;
 
 // 4개 시안의 "모티프 결합 방식"
 const VARIANTS = {
-  A: "literal, direct combination of the motifs",
-  B: "pure geometric abstraction of the concept",
-  C: "an adjacent or substitute motif that implies the concept",
-  D: "compound — multiple concepts compressed into one mark",
+  A: "direct motif combination — take the core motif literally and combine with brand concept",
+  B: "pure geometric abstraction — reduce the concept to basic shapes, lines, and proportions only",
+  C: "adjacent motif substitution — use a related or implied motif that hints at the concept indirectly",
+  D: "multi-concept compression — compress multiple brand values into a single unified form",
 };
 
 function buildPrompt(b, key) {
   const colors = [b.primaryHex, b.secondaryHex, ...(b.refColors || [])]
     .filter(Boolean).slice(0, 3).join(", ");
   return [
-    "Minimal, premium brand SYMBOL mark only. Absolutely no text, no letters, no numbers.",
-    `Concept: ${b.brandConcept || "a clean modern brand"}.`,
-    `Combination approach for this variant: ${VARIANTS[key]}.`,
-    `Use only these colors: ${colors || "#003894"}.`,
-    "Flat clean vector, smooth curves, balanced proportions, generous whitespace,",
-    "no gradient overuse, no 3D, no photo, no mockup, single centered icon, square.",
-    b.userPrompt ? `User priority request (follow first): ${b.userPrompt}.` : "",
+    // 역할 + 절대 규칙
+    "You are a luxury brand symbol designer. Design a SYMBOL MARK ONLY — absolutely NO text, NO letters, NO numbers, NO wordmarks, NO captions anywhere in the image.",
+
+    // 브랜드 입력
+    `Brand concept: ${b.brandConcept || "a clean, modern, premium brand"}.`,
+
+    // 시안별 모티프 결합 방식
+    `Design approach for variant ${key}: ${VARIANTS[key]}.`,
+
+    // 색상
+    `Colors (use 1–2 only, avoid gradients): ${colors || "#003894"}. No rainbow, no neon, no metallic shine.`,
+
+    // 핵심 원칙
+    "Core principles: (1) Meaning first — derive form from a single compressed concept, not from aesthetics. (2) Color restraint — 1–2 colors maximum. (3) Generous whitespace — do not fill the frame. (4) Vector precision — clean edges that hold at any size. (5) Silhouette readability — the form must be instantly identifiable without color.",
+
+    // 스타일 방향
+    "Style: Choose ONE direction — painterly mark (simplified silhouette of motif), geometric abstraction (pure shapes and proportion), or negative space (second meaning hidden in whitespace). Keep detail minimal within the chosen direction.",
+
+    // 금지
+    "Strictly avoid: all text or glyphs, gradient overuse, 3D effects, metallic gloss, photo realism, clipart clichés, over-detail, neon/rainbow colors.",
+
+    // 품질 기준
+    "Quality check before finalizing: Does the form convey its meaning without text? Is it readable at 16px icon size? Does it retain identity in single color? Can you explain the form's reason in one sentence? Does it feel premium and desirable?",
+
+    // 사용자 추가 요청
+    b.userPrompt ? `USER PRIORITY REQUEST (override all above if conflicting): ${b.userPrompt}.` : "",
   ].filter(Boolean).join(" ");
 }
 
