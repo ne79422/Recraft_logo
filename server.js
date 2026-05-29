@@ -34,10 +34,13 @@ function hexToRgb(hex) {
 // ★ 개선 #5: 부정문 범벅 긴 단락 대신, style이 벡터 룩을 책임지고 프롬프트는 핵심 의미만
 function buildPrompt(b, key) {
   return [
-    `A single premium logo symbol mark representing: ${b.brandConcept || "a clean, modern, premium brand"}.`,
+    `A single minimalist line-art logo symbol mark representing: ${b.brandConcept || "a clean, modern, premium brand"}.`,
+    b.motif ? `Core motif: ${b.motif}.` : "",
+    b.direction ? `Direction: ${b.direction}.` : "",
     `Design approach: ${VARIANTS[key]}.`,
-    "Flat vector illustration, bold geometric silhouette, one or two solid colors, generous negative space, centered, crisp clean edges, minimal detail.",
-    "Iconic, premium, instantly recognizable as a single mark. No text, no letters, no numbers, no words.",
+    // ★ 라인아트 지향 (채움형 금지)
+    "Style: minimalist single continuous line art, clean rounded outlines, uniform thick stroke, OUTLINE ONLY with no fill, one solid dark color on white background, generous negative space, centered, friendly and warm.",
+    "Iconic, premium, instantly recognizable as a single mark. No text, no letters, no numbers, no words. Not a filled blocky shape, not 3D, not a mascot illustration.",
     b.userPrompt ? `Priority request (follow this above all): ${b.userPrompt}.` : "",
   ].filter(Boolean).join(" ");
 }
@@ -50,11 +53,11 @@ function buildBody(prompt, brief, { useStyleId = true } = {}) {
     return { prompt, style_id: styleId, size: "1024x1024", n: 1 };
   }
 
-  // ★ 일반 모드(또는 style_id 폴백): 벡터 스타일 + 브랜드 색
-  const colors = [brief.primaryHex, brief.secondaryHex, ...(brief.refColors || [])]
+  // ★ 색 오염 방지: 참고이미지 추출색(refColors) 제거, 브랜드 주색 단색만 사용
+  const colors = [brief.primaryHex]
     .map(hexToRgb)
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, 1);
   const body = {
     prompt,
     model: "recraftv3",
