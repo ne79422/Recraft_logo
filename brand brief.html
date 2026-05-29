@@ -616,7 +616,7 @@
         {picked && (
           <span style={s3.pickedTag}><Check size={12} /><span style={{ marginLeft: 4 }}>담음</span></span>
         )}
-        <div style={s3.logoBox}>{img ? <img src={img} alt="" style={{width:'95%',height:'95%',objectFit:'contain'}} /> : svg ? <div style={{width:'90%',height:'90%'}} dangerouslySetInnerHTML={{__html: svg}} /> : <Logo color={color} />}</div>
+        <div style={s3.logoBox}>{img ? <img src={img} alt="" style={{width:'95%',height:'95%',objectFit:'contain',background:'#fff',colorScheme:'light'}} /> : svg ? <div style={{width:'90%',height:'90%'}} dangerouslySetInnerHTML={{__html: svg}} /> : <Logo color={color} />}</div>
         <div style={{ padding: '14px 14px 6px', flex: 1 }}>
           <div style={s3.cardLabel}>
             <span style={s3.cardLabelLetter}>{item.id}</span>
@@ -647,7 +647,7 @@
     return (
       <div style={s3.pickedCard}>
         <button type="button" onClick={onRemove} aria-label="제거" style={s3.removeBtn}>×</button>
-        <div style={s3.pickedLogoBox}>{img ? <img src={img} alt="" style={{maxWidth:'100%',maxHeight:'100%',width:'auto',height:'auto',objectFit:'contain',display:'block'}} /> : svg ? <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}} dangerouslySetInnerHTML={{__html: svg.replace(/^(<svg\b)/i, '$1 width="100%" height="100%"')}} /> : <Logo color={color} />}</div>
+        <div style={s3.pickedLogoBox}>{img ? <img src={img} alt="" style={{maxWidth:'100%',maxHeight:'100%',width:'auto',height:'auto',objectFit:'contain',display:'block',background:'#fff',colorScheme:'light'}} /> : svg ? <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}} dangerouslySetInnerHTML={{__html: svg.replace(/^(<svg\b)/i, '$1 width="100%" height="100%"')}} /> : <Logo color={color} />}</div>
         <div style={{ padding: '18px 14px 16px' }}>
           <div style={s3.cardLabel}>
             <span style={{ marginLeft: 0 }}>{item.label}</span>
@@ -660,7 +660,7 @@
     );
   }
 
-  function Step3View({ onBack, onNext, onSelectStep, picked, setPicked, concept, primary, secondary, genSvgs, setGenSvgs, motif, directions }) {
+  function Step3View({ onBack, onNext, onSelectStep, picked, setPicked, concept, primary, secondary, genSvgs, setGenSvgs, genImages, setGenImages, motif, directions }) {
     const [loading, setLoading] = useState(() => Object.keys(genSvgs || {}).length === 0);
     const [seed, setSeed] = useState(0); // bumps on "다시 만들기"
     const [backendUrl, setBackendUrl] = useState(() => {
@@ -668,7 +668,7 @@
       return stored !== null ? stored : 'https://recraft-logo.onrender.com';
     });
     const [editingUrl, setEditingUrl] = useState(false);
-    const [genImages, setGenImages] = useState({}); // Recraft backend image URLs (if configured)
+    // genImages is now App-level state (passed as prop) so it persists across navigation
     const [genPrompt, setGenPrompt] = useState(() => localStorage.getItem('genPrompt') || ''); // optional extra direction
     const [refImages, setRefImages] = useState(() => {
       try {
@@ -970,7 +970,7 @@ ${genPrompt.trim()}</사용자_추가_요청>` : '',
       const myGen = ++genRef.current;
       /* generate ONLY on first entry without a cached set, or on 다시 만들기 (seed bump).
          Re-entering step 3 with an existing set reuses it (no regeneration). */
-      if (seed === 0 && Object.keys(genSvgs || {}).length > 0) { setLoading(false); return; }
+      if (seed === 0 && (Object.keys(genSvgs || {}).length > 0 || Object.keys(genImages || {}).length > 0)) { setLoading(false); return; }
       setLoading(true);
       setGenSvgs({});
       setGenImages({});
@@ -1251,7 +1251,7 @@ ${genPrompt.trim()}</사용자_추가_요청>` : '',
               {loading ? (
                 <div style={s3.loadingBox}>
                   <div style={s3.spinner} />
-                  <span style={{ color: '#6b6f6e', fontSize: 13 }}>시안 4개를 만드는 중입니다… (1–2분)</span>
+                  <span style={{ color: '#6b6f6e', fontSize: 13 }}>시안 4개를 만드는 중입니다… (1분 내외)</span>
                 </div>
               ) : (
                 <section style={s3.candGrid}>
@@ -2085,6 +2085,7 @@ ${genPrompt.trim()}</사용자_추가_요청>` : '',
     const [transcript, setTranscript] = useState('');
     const [picked, setPicked] = useState([]); // lifted: shared with step 4; starts unselected
     const [genSvgs, setGenSvgs] = useState({}); // step-3 generated symbols (persist across nav)
+    const [genImages, setGenImages] = useState({}); // step-3 Recraft API images (persist across nav)
     const [design, setDesign] = useState(null); // step-4 design settings, surfaced to step 5
     const [step1Brand, setStep1Brand] = useState(() => {
       const stored = localStorage.getItem('step1Brand');
@@ -2268,6 +2269,8 @@ ${genPrompt.trim()}</사용자_추가_요청>` : '',
           setPicked={setPicked}
           genSvgs={genSvgs}
           setGenSvgs={setGenSvgs}
+          genImages={genImages}
+          setGenImages={setGenImages}
           concept={deriveConcept({ motif, mood, style, primary, secondary })}
           primary={primary}
           secondary={secondary}
