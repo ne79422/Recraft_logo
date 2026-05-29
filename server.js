@@ -45,23 +45,17 @@ function buildPrompt(b, key) {
   ].filter(Boolean).join(" ");
 }
 
-function buildBody(prompt, brief, { useStyleId = true } = {}) {
-  const styleId = (process.env.RECRAFT_STYLE_ID || "").trim();
-
-  // ★ 커스텀 스타일(style_id) 사용 시: prompt + style_id 만! (model·style·controls 동시 전송 금지 → 400 에러)
-  if (styleId && useStyleId) {
-    return { prompt, style_id: styleId, size: "1024x1024", n: 1 };
-  }
-
-  // ★ 색 오염 방지: 참고이미지 추출색(refColors) 제거, 브랜드 주색 단색만 사용
+function buildBody(prompt, brief) {
+  // ★ V4/V4.1은 style 파라미터 미지원 → 벡터는 모델명(recraftv4_1_vector)으로 선택.
+  //   style/style_id 보내지 않음 (보내면 구형 V3로 폴백되거나 거부됨).
+  //   controls(색상)는 전 모델 지원 → 브랜드 주색 1색만 (참고이미지 색 오염 방지).
   const colors = [brief.primaryHex]
     .map(hexToRgb)
     .filter(Boolean)
     .slice(0, 1);
   const body = {
     prompt,
-    model: (process.env.RECRAFT_MODEL || "recraftv3").trim(),
-    style: (process.env.RECRAFT_STYLE || "vector_illustration").trim(),
+    model: (process.env.RECRAFT_MODEL || "recraftv4_1_vector").trim(),
     size: "1024x1024",
     n: 1,
   };
@@ -84,25 +78,15 @@ async function callRecraft(body) {
     const err = new Error("recraft " + r.status + " " + txt);
     err.status = r.status;
     err.bodyText = txt;
+    console.error("[recraft error]", r.status, txt);
     throw err;
   }
   const j = await r.json();
-  return j.data?.[0]?.image_url || null;
+  return j.data?.[0]?.image_url || j.data?.[0]?.url || null;
 }
 
 async function recraftOne(prompt, brief) {
-  const styleId = (process.env.RECRAFT_STYLE_ID || "").trim();
-  // ① 커스텀 스타일이 있으면 먼저 시도
-  if (styleId) {
-    try {
-      return await callRecraft(buildBody(prompt, brief, { useStyleId: true }));
-    } catch (e) {
-      // 스타일을 못 찾으면(404/접근불가 등) → vector_illustration으로 자동 폴백
-      console.error("[style_id 실패 → vector_illustration 폴백]", e.status, e.bodyText || e.message);
-    }
-  }
-  // ② 일반 벡터 스타일 (폴백 또는 기본)
-  return await callRecraft(buildBody(prompt, brief, { useStyleId: false }));
+  return await callRecraft(buildBody(prompt, brief));
 }
 
 app.post("/api/generate-logos", async (req, res) => {
@@ -129,37 +113,13 @@ app.get("/", (_req, res) => res.send("logo-gen backend OK"));
 
 // ── 진단용: 브라우저에서 https://...onrender.com/api/test 접속하면 실제 결과/에러를 JSON으로 보여줌 ──
 app.get("/api/test", async (_req, res) => {
-  const rawStyleId = process.env.RECRAFT_STYLE_ID || "";
-  const styleId = rawStyleId.trim();
   const info = {
     hasToken: !!RECRAFT_TOKEN,
     tokenLength: RECRAFT_TOKEN.length,
-    activeModel: (process.env.RECRAFT_MODEL || "recraftv3").trim(),
-    activeStyle: (process.env.RECRAFT_STYLE || "vector_illustration").trim(),
-    hasStyleId: !!styleId,
-    styleIdPreview: styleId ? styleId.slice(0, 8) + "..." : null,
-    styleIdLength: styleId.length,
-    styleIdHadWhitespace: rawStyleId !== styleId,   // ← 공백/줄바꿈 있었는지
+    activeModel: (process.env.RECRAFT_MODEL || "recraftv4_1_vector").trim(),
   };
 
-  // ① 먼저 "이 토큰으로 이 스타일에 접근 가능한지" 직접 확인
-  if (styleId) {
-    try {
-      const sr = await fetch("https://external.api.recraft.ai/v1/styles/" + styleId, {
-        headers: { "Authorization": `Bearer ${RECRAFT_TOKEN}` },
-      });
-      const stxt = await sr.text();
-      info.styleLookup = {
-        httpStatus: sr.status,
-        found: sr.ok,
-        body: (() => { try { return JSON.parse(stxt); } catch { return stxt; } })(),
-      };
-    } catch (e) {
-      info.styleLookup = { error: String(e) };
-    }
-  }
-
-  // ② 실제 이미지 생성 테스트
+  // 실제 이미지 생성 테스트
   try {
     const body = buildBody(
       "A single premium logo symbol mark of a friendly bear, flat vector, bold silhouette.",
