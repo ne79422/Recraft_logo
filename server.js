@@ -60,8 +60,8 @@ function buildBody(prompt, brief, { useStyleId = true } = {}) {
     .slice(0, 1);
   const body = {
     prompt,
-    model: "recraftv3",
-    style: "vector_illustration",
+    model: (process.env.RECRAFT_MODEL || "recraftv3").trim(),
+    style: (process.env.RECRAFT_STYLE || "vector_illustration").trim(),
     size: "1024x1024",
     n: 1,
   };
@@ -134,6 +134,8 @@ app.get("/api/test", async (_req, res) => {
   const info = {
     hasToken: !!RECRAFT_TOKEN,
     tokenLength: RECRAFT_TOKEN.length,
+    activeModel: (process.env.RECRAFT_MODEL || "recraftv3").trim(),
+    activeStyle: (process.env.RECRAFT_STYLE || "vector_illustration").trim(),
     hasStyleId: !!styleId,
     styleIdPreview: styleId ? styleId.slice(0, 8) + "..." : null,
     styleIdLength: styleId.length,
