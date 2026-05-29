@@ -34,14 +34,12 @@ function hexToRgb(hex) {
 // ★ 개선 #5: 부정문 범벅 긴 단락 대신, style이 벡터 룩을 책임지고 프롬프트는 핵심 의미만
 function buildPrompt(b, key) {
   return [
-    `A single minimalist line-art logo symbol mark representing: ${b.brandConcept || "a clean, modern, premium brand"}.`,
-    b.motif ? `Core motif: ${b.motif}.` : "",
-    b.direction ? `Direction: ${b.direction}.` : "",
-    `Design approach: ${VARIANTS[key]}.`,
-    // ★ 라인아트 지향 (채움형 금지)
-    "Style: minimalist single continuous line art, clean rounded outlines, uniform thick stroke, OUTLINE ONLY with no fill, one solid dark color on white background, generous negative space, centered, friendly and warm.",
-    "Iconic, premium, instantly recognizable as a single mark. No text, no letters, no numbers, no words. Not a filled blocky shape, not 3D, not a mascot illustration.",
-    b.userPrompt ? `Priority request (follow this above all): ${b.userPrompt}.` : "",
+    `Minimalist line-art logo symbol mark of: ${b.motif || b.brandConcept || "a clean modern premium brand"}.`,
+    b.direction ? `${b.direction}.` : "",
+    `Approach: ${VARIANTS[key]}.`,
+    "A single clean continuous line, uniform stroke weight, no fill, one dark color on a plain solid white background, lots of empty negative space, small centered mark, simple friendly and premium.",
+    "No text, no letters, no numbers. Not a solid filled shape, not a dark/black background.",
+    b.userPrompt ? `${b.userPrompt}.` : "",
   ].filter(Boolean).join(" ");
 }
 
@@ -55,7 +53,7 @@ function buildBody(prompt, brief) {
     .slice(0, 1);
   const body = {
     prompt,
-    model: (process.env.RECRAFT_MODEL || "recraftv4_1_vector").trim(),
+    model: (process.env.RECRAFT_MODEL || "recraftv4_1").trim(),
     size: "1024x1024",
     n: 1,
   };
@@ -129,7 +127,7 @@ app.get("/api/test", async (_req, res) => {
   const info = {
     hasToken: !!RECRAFT_TOKEN,
     tokenLength: RECRAFT_TOKEN.length,
-    activeModel: (process.env.RECRAFT_MODEL || "recraftv4_1_vector").trim(),
+    activeModel: (process.env.RECRAFT_MODEL || "recraftv4_1").trim(),
   };
 
   // 실제 이미지 생성 테스트 (앱과 동일한 전체 경로: 생성 → data URI 변환)
