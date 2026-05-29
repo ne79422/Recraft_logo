@@ -609,6 +609,30 @@
     );
   }
 
+  /* 로고 표시: SVG data URI는 인라인으로(가장 안정적), 그 외 이미지는 <img>, 없으면 코드 심볼 */
+  function decodeSvgDataUri(uri) {
+    try {
+      const b64 = uri.split(',')[1];
+      let s = atob(b64);
+      // UTF-8 보정 (한글/특수문자 SVG 대비)
+      try { s = decodeURIComponent(escape(s)); } catch (e) {}
+      // 고정 크기 제거 후 컨테이너에 꽉 차게
+      s = s.replace(/(<svg\b[^>]*?)\s+width\s*=\s*"[^"]*"/i, '$1')
+           .replace(/(<svg\b[^>]*?)\s+height\s*=\s*"[^"]*"/i, '$1')
+           .replace(/<svg\b/i, '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet"');
+      return s;
+    } catch (e) { return null; }
+  }
+  function LogoMedia({ img, svg, Logo, color, imgStyle }) {
+    if (img && img.indexOf('data:image/svg+xml') === 0) {
+      const inline = decodeSvgDataUri(img);
+      if (inline) return <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }} dangerouslySetInnerHTML={{ __html: inline }} />;
+    }
+    if (img) return <img src={img} alt="" style={imgStyle} />;
+    if (svg) return <div style={{ width: '90%', height: '90%' }} dangerouslySetInnerHTML={{ __html: svg }} />;
+    return Logo ? <Logo color={color} /> : null;
+  }
+
   const CANDIDATES = [
     { id: 'A', label: 'Direct',      sub: '모티프 직접 결합',
       desc: '가장 직접적인 상승 —\n우상향으로 떠오르는 단일 곡선 한 획',
@@ -634,7 +658,7 @@
         {picked && (
           <span style={s3.pickedTag}><Check size={12} /><span style={{ marginLeft: 4 }}>담음</span></span>
         )}
-        <div style={s3.logoBox}>{img ? <img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'contain',background:'#fff',colorScheme:'light',display:'block'}} /> : svg ? <div style={{width:'90%',height:'90%'}} dangerouslySetInnerHTML={{__html: svg}} /> : <Logo color={color} />}</div>
+        <div style={s3.logoBox}><LogoMedia img={img} svg={svg} Logo={Logo} color={color} imgStyle={{width:'100%',height:'100%',objectFit:'contain',background:'#fff',colorScheme:'light',display:'block'}} /></div>
         <div style={{ padding: '14px 14px 6px', flex: 1 }}>
           <div style={s3.cardLabel}>
             <span style={s3.cardLabelLetter}>{item.id}</span>
@@ -665,7 +689,7 @@
     return (
       <div style={s3.pickedCard}>
         <button type="button" onClick={onRemove} aria-label="제거" style={s3.removeBtn}>×</button>
-        <div style={s3.pickedLogoBox}>{img ? <img src={img} alt="" style={{maxWidth:'100%',maxHeight:'100%',width:'auto',height:'auto',objectFit:'contain',display:'block',background:'#fff',colorScheme:'light'}} /> : svg ? <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}} dangerouslySetInnerHTML={{__html: svg.replace(/^(<svg\b)/i, '$1 width="100%" height="100%"')}} /> : <Logo color={color} />}</div>
+        <div style={s3.pickedLogoBox}><LogoMedia img={img} svg={svg} Logo={Logo} color={color} imgStyle={{maxWidth:'100%',maxHeight:'100%',width:'auto',height:'auto',objectFit:'contain',display:'block',background:'#fff',colorScheme:'light'}} /></div>
         <div style={{ padding: '18px 14px 16px' }}>
           <div style={s3.cardLabel}>
             <span style={{ marginLeft: 0 }}>{item.label}</span>
