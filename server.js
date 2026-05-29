@@ -132,28 +132,26 @@ app.get("/api/test", async (_req, res) => {
     activeModel: (process.env.RECRAFT_MODEL || "recraftv4_1_vector").trim(),
   };
 
-  // 실제 이미지 생성 테스트
+  // 실제 이미지 생성 테스트 (앱과 동일한 전체 경로: 생성 → data URI 변환)
   try {
-    const body = buildBody(
-      "A single premium logo symbol mark of a friendly bear, flat vector, bold silhouette.",
-      { primaryHex: "#C2632C" }
-    );
-    info.requestBody = { ...body, prompt: body.prompt.slice(0, 40) + "..." };
-    const r = await fetch("https://external.api.recraft.ai/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RECRAFT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    info.httpStatus = r.status;
-    const txt = await r.text();
-    try { info.response = JSON.parse(txt); } catch { info.response = txt; }
-    info.result = r.ok ? "✅ 성공 — Recraft 호출 정상" : "❌ 실패 — 아래 response의 에러 메시지 확인";
+    const prompt = "A single premium logo symbol mark of a friendly bear, flat vector, bold silhouette.";
+    const out = await recraftOne(prompt, { primaryHex: "#C2632C" });
+    if (typeof out === "string" && out.startsWith("data:")) {
+      info.result = "✅ 성공 — data URI 변환 완료 (앱에서 정상 표시됨)";
+      info.resultType = "data URI";
+      info.dataUriPrefix = out.slice(0, 40);
+      info.dataUriLength = out.length;
+    } else if (typeof out === "string" && out.startsWith("http")) {
+      info.result = "⚠️ 생성은 됐으나 data URI 변환 실패 → URL 반환 (브라우저에서 막혀 흰 화면 원인!)";
+      info.resultType = "URL (문제)";
+      info.url = out;
+    } else {
+      info.result = "❌ 이미지 없음 (null)";
+      info.resultType = String(out);
+    }
   } catch (e) {
-    info.result = "❌ 네트워크/예외 오류";
-    info.error = String(e);
+    info.result = "❌ 생성 실패";
+    info.error = String(e.bodyText || e.message || e);
   }
   res.json(info);
 });
