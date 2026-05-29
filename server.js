@@ -42,29 +42,32 @@ function buildPrompt(b, key) {
   ].filter(Boolean).join(" ");
 }
 
-async function recraftOne(prompt, brief) {
-  // ★ 개선 #3: 브랜드 색을 controls.colors 로 (최대 3색)
+function buildBody(prompt, brief) {
+  const styleId = process.env.RECRAFT_STYLE_ID;
+
+  // ★ 커스텀 스타일(style_id) 사용 시: prompt + style_id 만! (model·style·controls 동시 전송 금지 → 400 에러)
+  if (styleId) {
+    return { prompt, style_id: styleId, size: "1024x1024", n: 1 };
+  }
+
+  // ★ 일반 모드: 벡터 스타일 + 브랜드 색
   const colors = [brief.primaryHex, brief.secondaryHex, ...(brief.refColors || [])]
     .map(hexToRgb)
     .filter(Boolean)
     .slice(0, 3);
-
   const body = {
     prompt,
-    model: "recraftv3",            // ★ 개선 #2: 유효한 모델명 (이전 "recraftv4_vector"는 존재하지 않음)
-    style: "vector_illustration",  // ★ 개선 #1: 벡터 스타일 = 웹앱 고퀄의 핵심
+    model: "recraftv3",
+    style: "vector_illustration",
     size: "1024x1024",
     n: 1,
   };
   if (colors.length) body.controls = { colors };
+  return body;
+}
 
-  // ★ 개선 #4(선택): 참고이미지로 만든 커스텀 스타일이 있으면 style_id 우선 적용
-  //   (RECRAFT_STYLE_ID 환경변수에 넣으면 style 대신 그 스타일을 사용)
-  if (process.env.RECRAFT_STYLE_ID) {
-    delete body.style;
-    body.style_id = process.env.RECRAFT_STYLE_ID;
-  }
-
+async function recraftOne(prompt, brief) {
+  const body = buildBody(prompt, brief);
   const r = await fetch("https://external.api.recraft.ai/v1/images/generations", {
     method: "POST",
     headers: {
@@ -73,7 +76,11 @@ async function recraftOne(prompt, brief) {
     },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error("recraft " + r.status + " " + (await r.text()));
+  if (!r.ok) {
+    const txt = await r.text();
+    console.error("[recraft error]", r.status, txt);   // ← Render Logs에 에러 표시
+    throw new Error("recraft " + r.status + " " + txt);
+  }
   const j = await r.json();
   return j.data?.[0]?.image_url || null;
 }
@@ -93,6 +100,40 @@ app.post("/api/generate-logos", async (req, res) => {
 });
 
 app.get("/", (_req, res) => res.send("logo-gen backend OK"));
+
+// ── 진단용: 브라우저에서 https://...onrender.com/api/test 접속하면 실제 결과/에러를 JSON으로 보여줌 ──
+app.get("/api/test", async (_req, res) => {
+  const info = {
+    hasToken: !!RECRAFT_TOKEN,
+    hasStyleId: !!process.env.RECRAFT_STYLE_ID,
+    styleIdPreview: process.env.RECRAFT_STYLE_ID
+      ? process.env.RECRAFT_STYLE_ID.slice(0, 8) + "..."
+      : null,
+  };
+  try {
+    const body = buildBody(
+      "A single premium logo symbol mark of a friendly bear, flat vector, bold silhouette.",
+      { primaryHex: "#C2632C" }
+    );
+    info.requestBody = { ...body, prompt: body.prompt.slice(0, 40) + "..." };
+    const r = await fetch("https://external.api.recraft.ai/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${RECRAFT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    info.httpStatus = r.status;
+    const txt = await r.text();
+    try { info.response = JSON.parse(txt); } catch { info.response = txt; }
+    info.result = r.ok ? "✅ 성공 — Recraft 호출 정상" : "❌ 실패 — 아래 response의 에러 메시지 확인";
+  } catch (e) {
+    info.result = "❌ 네트워크/예외 오류";
+    info.error = String(e);
+  }
+  res.json(info);
+});
 
 const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => console.log("logo gen on :" + PORT));
