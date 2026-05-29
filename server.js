@@ -13,12 +13,12 @@ app.use(express.json({ limit: "8mb" }));
 
 const RECRAFT_TOKEN = (process.env.RECRAFT_API_TOKEN || "").trim();
 
-// 4개 시안의 "모티프 결합 방식"
+// 4개 시안의 "모티프 결합 방식" — 형태가 확연히 달라지도록 구체적·강한 지시
 const VARIANTS = {
-  A: "direct motif combination — take the core motif literally and merge it with the brand concept",
-  B: "pure geometric abstraction — reduce the concept to basic shapes, lines and proportions only",
-  C: "adjacent motif substitution — use a related or implied motif that hints at the concept indirectly",
-  D: "multi-concept compression — compress multiple brand values into a single unified form",
+  A: "Depict the motif LITERALLY and directly as the main recognizable shape. Representational and immediately readable.",
+  B: "Do NOT depict the motif literally. Express the idea through PURE GEOMETRY only — circles, triangles, squares, arcs, grids, proportion. Abstract, structural, non-representational, clearly different from a simple curve.",
+  C: "Replace the motif with a DIFFERENT, unexpected but related metaphorical object that implies the same idea indirectly. Not the literal motif — choose an adjacent symbol.",
+  D: "Fuse TWO distinct elements into ONE unified, interlocking compound mark where shapes share lines or overlap. More layered and complex than a single shape; enclosed or contained composition.",
 };
 
 // ── 색상: hex → Recraft controls.colors 구조 (RGB 배열) ──
@@ -34,10 +34,12 @@ function hexToRgb(hex) {
 // ★ 개선 #5: 부정문 범벅 긴 단락 대신, style이 벡터 룩을 책임지고 프롬프트는 핵심 의미만
 function buildPrompt(b, key) {
   return [
-    `Minimalist line-art logo symbol mark of: ${b.motif || b.brandConcept || "a clean modern premium brand"}.`,
+    "Professional-grade, high-quality logo symbol.",
+    `Concept: ${b.motif || b.brandConcept || "a clean modern premium brand"}.`,
     b.direction ? `${b.direction}.` : "",
-    `Approach: ${VARIANTS[key]}.`,
-    "A single clean continuous line, uniform stroke weight, no fill, one dark color on a plain solid white background, lots of empty negative space, small centered mark, simple friendly and premium.",
+    // ★ 시안별 형태 차별화를 최우선으로
+    `DESIGN APPROACH (most important — shape must follow this): ${VARIANTS[key]}`,
+    "One dark color on a plain solid white background, lots of empty negative space, small centered mark, clean and premium.",
     "No text, no letters, no numbers. Not a solid filled shape, not a dark/black background.",
     b.userPrompt ? `${b.userPrompt}.` : "",
   ].filter(Boolean).join(" ");
