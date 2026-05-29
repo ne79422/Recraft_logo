@@ -102,15 +102,21 @@ async function recraftOne(prompt, brief) {
   return await callRecraft(buildBody(prompt, brief, { useStyleId: false }));
 }
 
-// 프론트(brand brief.html)가 호출하는 단일 엔드포인트
 app.post("/api/generate-logos", async (req, res) => {
   try {
     const brief = req.body || {};
-    const keys = ["A", "B", "C", "D"];
-    const urls = await Promise.all(
-      keys.map((k) => recraftOne(buildPrompt(brief, k), brief).catch(() => null))
+    // variantKeys 가 넘어오면 그것만, 없으면 기본 4개
+    const keys = (brief.variantKeys && brief.variantKeys.length)
+      ? brief.variantKeys.filter(k => ["A","B","C","D"].includes(k))
+      : ["A", "B", "C", "D"];
+    const results = await Promise.all(
+      keys.map(async (k) => {
+        try { return [k, await recraftOne(buildPrompt(brief, k), brief)]; }
+        catch { return [k, null]; }
+      })
     );
-    res.json({ images: { A: urls[0], B: urls[1], C: urls[2], D: urls[3] } });
+    const images = Object.fromEntries(results);
+    res.json({ images });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
