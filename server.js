@@ -44,8 +44,7 @@ async function recraftOne(prompt) {
     },
     body: JSON.stringify({
       prompt,
-      style: "vector_illustration",
-      model: "recraftv3",
+      model: "recraftv4_vector",
       size: "1024x1024",
       n: 1,
     }),
