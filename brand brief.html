@@ -1,0 +1,2598 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>요청 내용 확인</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg: #f3f4f1;
+    --bg-soft: #ececea;
+    --card: #ffffff;
+    --ink: #111212;
+    --ink-2: #2a2c2c;
+    --muted: #6b6f6e;
+    --muted-2: #8d918f;
+    --line: #dcdedb;
+    --line-2: #e6e8e4;
+    --field: #ffffff;
+    --field-line: #d3d6d2;
+    --field-line-strong: #111212;
+    --chip-bg: #ffffff;
+    --chip-line: #c9ccc7;
+    --accuracy-bg: #d8efe1;
+    --accuracy-fg: #1f6b3e;
+    --info-bg: #eef0ec;
+    --primary: #111212;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.5;
+  }
+  button{font-family: inherit}
+  input, textarea{font-family: inherit; color: inherit}
+  textarea{resize: vertical}
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Force image/symbol areas to stay light even when the viewer is in dark mode.
+     A filter-based dark theme inverts the whole page; re-inverting marked areas
+     (every element with an inline color-scheme:light) returns them to true colors. */
+  @media (prefers-color-scheme: dark){
+    [style*="color-scheme"]{ filter: invert(1) hue-rotate(180deg); }
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+  const { useState, useMemo, useRef, useEffect } = React;
+
+  /* ============================================================
+     ▼▼▼ 로고 이미지 생성 백엔드 주소 (Recraft 연동) ▼▼▼
+     백엔드를 배포한 뒤, 아래 따옴표 안에 그 주소를 붙여넣으세요.
+     예) "https://my-backend.onrender.com/api/generate-logos"
+     비워두면(""), 기존 방식(코드로 그린 심볼/참고이미지 실루엣)으로 동작합니다.
+     ============================================================ */
+  window.LOGO_GEN_API_URL = window.LOGO_GEN_API_URL || "";
+
+  /* ---------- step rail ---------- */
+  const STEPS = [
+    { id: 1, title: '상담 내용 입력', sub: '고객 상담 대화 묶어넣기' },
+    { id: 2, title: '내용 확인',     sub: '정리된 내용 검토' },
+    { id: 3, title: '1차 시안',      sub: '마음에 드는 시안 고르기' },
+    { id: 4, title: '글꼴 고르기',   sub: '시안에 브랜드명 합치기' },
+    { id: 5, title: '제안서 보내기', sub: '고객 발송 → 시안 확정' },
+    { id: 6, title: '파일 받기',     sub: '전체 이미지 내려받기' },
+  ];
+
+  const Check = ({size=14, color='#fff'}) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3.5 8.4L6.6 11.5L12.5 4.8" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
+  function StepRail({ current, onSelect }) {
+    return (
+      <nav style={railStyles.rail} aria-label="진행 단계">
+        <ol style={railStyles.list}>
+          {STEPS.map((s) => {
+            const state = s.id < current ? 'done' : s.id === current ? 'current' : 'todo';
+            const rowStyle = {
+              ...railStyles.row,
+              background: state === 'current' ? '#e5e7e2' : 'transparent',
+            };
+            const dotStyle = {
+              ...railStyles.dot,
+              ...(state === 'done'
+                ? { background: '#111212', borderColor: '#111212', color: '#fff' }
+                : state === 'current'
+                ? { background: '#fff', borderColor: '#111212', color: '#111212' }
+                : { background: '#fff', borderColor: '#bdc1bb', color: '#7d817b' }),
+            };
+            return (
+              <li key={s.id}>
+                <button type="button" onClick={() => onSelect(s.id)} style={rowStyle}>
+                  <span style={dotStyle} aria-hidden="true">
+                    {state === 'done' ? <Check /> : <span style={{fontWeight:500, fontSize:13}}>{s.id}</span>}
+                  </span>
+                  <span style={railStyles.text}>
+                    <span style={{
+                      ...railStyles.title,
+                      color: state === 'todo' ? '#5a5e5a' : '#111212',
+                      fontWeight: state === 'current' ? 700 : 600,
+                    }}>{s.title}</span>
+                    <span style={{
+                      ...railStyles.sub,
+                      color: state === 'todo' ? '#9a9d97' : '#7a7e79',
+                    }}>{s.sub}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+    );
+  }
+
+  const railStyles = {
+    rail: { width: 256, flexShrink: 0, padding: '40px 18px 24px 28px' },
+    list: { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 },
+    row: {
+      display: 'flex', alignItems: 'center', gap: 12,
+      width: '100%', padding: '10px 12px',
+      border: 'none', borderRadius: 999, cursor: 'pointer',
+      textAlign: 'left', font: 'inherit',
+      transition: 'background 120ms ease',
+    },
+    dot: {
+      width: 28, height: 28, borderRadius: '50%',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      border: '1.5px solid', flexShrink: 0,
+    },
+    text: { display: 'flex', flexDirection: 'column', lineHeight: 1.25 },
+    title: { fontSize: 14 },
+    sub: { fontSize: 11.5, marginTop: 2 },
+  };
+
+  /* ---------- form atoms ---------- */
+  function Field({ label, children, span = 1 }) {
+    return (
+      <div style={{ gridColumn: `span ${span}`, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: '#2a2c2c' }}>{label}</label>
+        {children}
+      </div>
+    );
+  }
+
+  const inputBase = {
+    width: '100%',
+    border: '1px solid var(--field-line)',
+    background: 'var(--field)',
+    borderRadius: 8,
+    padding: '10px 12px',
+    fontSize: 14,
+    color: '#111212',
+    outline: 'none',
+    transition: 'border-color 120ms ease, box-shadow 120ms ease',
+  };
+
+  function TextInput(props){
+    const [focus, setFocus] = useState(false);
+    const style = {
+      ...inputBase,
+      borderColor: focus ? '#111212' : 'var(--field-line)',
+      boxShadow: focus ? '0 0 0 3px rgba(17,18,18,0.06)' : 'none',
+    };
+    return <input {...props} style={style} onFocus={()=>setFocus(true)} onBlur={()=>setFocus(false)} />;
+  }
+
+  function TextArea(props){
+    const [focus, setFocus] = useState(false);
+    const style = {
+      ...inputBase,
+      padding: '10px 12px',
+      minHeight: 44,
+      borderColor: focus ? '#111212' : 'var(--field-line)',
+      boxShadow: focus ? '0 0 0 3px rgba(17,18,18,0.06)' : 'none',
+      lineHeight: 1.55,
+    };
+    return <textarea {...props} style={style} onFocus={()=>setFocus(true)} onBlur={()=>setFocus(false)} />;
+  }
+
+  /* ---------- chip renderers ---------- */
+  const splitCsv = (s) => s.split(',').map(t => t.trim()).filter(Boolean);
+
+  function ChipRowOutlined({ items, onRemove }) {
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+        {items.map((t, i) => (
+          <button key={i} type="button" onClick={() => onRemove && onRemove(i)} title="클릭하면 삭제"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 8px 4px 10px',
+              border: '1px solid #c9ccc7',
+              borderRadius: 999,
+              background: '#fff',
+              fontSize: 12.5, color: '#2a2c2c',
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'background 100ms ease, border-color 100ms ease',
+            }}
+            onMouseEnter={(e)=>{ e.currentTarget.style.background='#f4ecec'; e.currentTarget.style.borderColor='#e0b4b4'; }}
+            onMouseLeave={(e)=>{ e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#c9ccc7'; }}
+          >
+            <span>{t}</span>
+            <span aria-hidden style={{ fontSize: 13, lineHeight: 1, color: '#9a9d97', marginTop: -1 }}>×</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function ChipRowPlain({ items, onRemove }) {
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, paddingLeft: 2 }}>
+        {items.map((t, i) => (
+          <button key={i} type="button" onClick={() => onRemove && onRemove(i)} title="클릭하면 삭제"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '2px 4px 2px 2px',
+              border: 'none', background: 'transparent',
+              fontSize: 13, color: '#5a5e5a', cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'color 100ms ease',
+            }}
+            onMouseEnter={(e)=>{ e.currentTarget.style.color='#b04a4a'; }}
+            onMouseLeave={(e)=>{ e.currentTarget.style.color='#5a5e5a'; }}
+          >
+            <span>{t}</span>
+            <span aria-hidden style={{ fontSize: 12, lineHeight: 1, opacity: 0.6 }}>×</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  /* ---------- bullet list editor ---------- */
+  function BulletList({ value, onChange }) {
+    const update = (i, v) => {
+      const next = [...value]; next[i] = v; onChange(next);
+    };
+    const remove = (i) => {
+      if (value.length === 1) { onChange(['']); return; }
+      const next = value.filter((_,idx) => idx !== i); onChange(next);
+    };
+    const onKey = (i, e) => {
+      if (e.key === 'Enter') { e.preventDefault(); const next=[...value]; next.splice(i+1,0,''); onChange(next);
+        setTimeout(()=>{ const el = document.querySelector(`[data-bullet="${i+1}"]`); el && el.focus(); }, 0);
+      }
+      if (e.key === 'Backspace' && value[i] === '' && value.length > 1) {
+        e.preventDefault(); remove(i);
+        setTimeout(()=>{ const el = document.querySelector(`[data-bullet="${Math.max(0,i-1)}"]`); el && el.focus(); }, 0);
+      }
+    };
+    return (
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {value.map((line, i) => (
+          <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span aria-hidden style={{
+              width: 4, height: 4, borderRadius: '50%', background: '#3a3c3a', flexShrink: 0, marginLeft: 6,
+            }} />
+            <input
+              data-bullet={i}
+              value={line}
+              onChange={(e)=>update(i, e.target.value)}
+              onKeyDown={(e)=>onKey(i, e)}
+              placeholder="새 항목 (Enter 로 추가)"
+              style={{
+                flex: 1, border: 'none', background: 'transparent', outline: 'none',
+                fontSize: 14, color: '#2a2c2c', padding: '4px 0',
+              }}
+            />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  /* ---------- avoid section row ---------- */
+  function AvoidRow({ label, value, onChange, placeholder }) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '88px 1fr', alignItems: 'baseline', gap: 14 }}>
+        <span style={{ fontSize: 13.5, color: '#2a2c2c', fontWeight: 500 }}>{label}</span>
+        <input
+          value={value}
+          onChange={(e)=>onChange(e.target.value)}
+          placeholder={placeholder || '(없음)'}
+          style={{
+            border: 'none', background: 'transparent', outline: 'none',
+            fontSize: 13.5, color: '#3a3c3a', padding: '4px 0', borderBottom: '1px dashed transparent',
+            width: '100%',
+          }}
+          onFocus={(e)=>{ e.target.style.borderBottomColor = '#c9ccc7'; }}
+          onBlur={(e)=>{ e.target.style.borderBottomColor = 'transparent'; }}
+        />
+      </div>
+    );
+  }
+
+  /* ---------- color field ---------- */
+  function ColorField({ value, onChange }) {
+    // value: { name: "딥 네이비블루", hex: "#003894" }
+    const [focus, setFocus] = useState(false);
+    const wrap = {
+      ...inputBase,
+      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 8px 10px',
+      borderColor: focus ? '#111212' : 'var(--field-line)',
+      boxShadow: focus ? '0 0 0 3px rgba(17,18,18,0.06)' : 'none',
+    };
+    return (
+      <div style={wrap}>
+        <label style={{ position: 'relative', width: 18, height: 18, flexShrink: 0, cursor: 'pointer', display: 'inline-block' }}
+          title="클릭하면 색을 고를 수 있어요">
+          <span aria-hidden style={{
+            display: 'block', width: 18, height: 18, borderRadius: 5, background: value.hex,
+            border: '1px solid rgba(0,0,0,0.08)',
+          }} />
+          <input
+            type="color"
+            value={/^#[0-9A-Fa-f]{6}$/.test(value.hex || '') ? value.hex : '#000000'}
+            onChange={(e)=>onChange({ ...value, hex: e.target.value.toUpperCase() })}
+            style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', border: 'none', padding: 0 }}
+          />
+        </label>
+        <input
+          value={value.name}
+          onChange={(e)=>onChange({ ...value, name: e.target.value })}
+          onFocus={()=>setFocus(true)}
+          onBlur={()=>setFocus(false)}
+          style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 14 }}
+        />
+        <span style={{ color: '#7a7e79', fontSize: 13, whiteSpace: 'nowrap' }}>(</span>
+        <input
+          value={value.hex}
+          onChange={(e)=>{
+            let v = e.target.value.toUpperCase();
+            if (v && !v.startsWith('#')) v = '#' + v.replace(/^#+/, '');
+            onChange({ ...value, hex: v });
+          }}
+          onFocus={()=>setFocus(true)}
+          onBlur={()=>setFocus(false)}
+          style={{
+            width: 80, border: 'none', outline: 'none', background: 'transparent',
+            fontSize: 13, color: '#7a7e79', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            textTransform: 'uppercase',
+          }}
+        />
+        <span style={{ color: '#7a7e79', fontSize: 13 }}>)</span>
+      </div>
+    );
+  }
+
+  /* ---------- step 1 view ---------- */
+  function Step1View({ value, onChange, onNext, brandName, onBrandName }) {
+    const [focus, setFocus] = useState(false);
+    const taRef = useRef(null);
+
+    const fillExample = () => {
+      const example = `[고객] 안녕하세요, 동네에서 작은 카페 하나 열려고 하는데 로고를 만들고 싶어서요. 가게 이름은 "달구름 카페"이에요.
+
+[상담] 좀 더 자세히 알려주세요. 어떤 분위기의 카페인가요?
+
+[고객] 고요하고 아늑한 느낌이에요. 남녀노소 누구나 대상이고, 날마다 조용히 책 읽는 손님들이 와서 머물다 갈 수 있는 공간이었으면 좋겠어요.
+
+[상담] 원하시는 모티프나 이미지가 있으세요?
+
+[고객] 아침 햇살, 도자기 컵, 조용한 달빛... 그런 느낌이 들었으면 해요. 색은 따뜻한 베이지나 연한 흐릿색 종류를 생각했어요.
+
+[상담] 피하고 싶은 느낌이나 스타일이 있을까요?
+
+[고객] 너무 화려하거나 자극적인 색, 만화 귀엽이 캐릭터 같은 건 피해주세요.`;
+      onChange(example);
+      setTimeout(()=>taRef.current && taRef.current.focus(), 0);
+    };
+
+    /* brand name must be normal text: non-empty, no incomplete jamo, has a real
+       letter/digit/Korean char, and only normal chars (+ light brand punctuation) */
+    const nameValid = (() => {
+      const v = (brandName || '').trim();
+      if (!v) return false;
+      if (hasIncompleteJamo(v)) return false;
+      if (!/[A-Za-z0-9가-힣]/.test(v)) return false;
+      if (!/^[A-Za-z0-9가-힣\s&.\-·'’]+$/.test(v)) return false;
+      return true;
+    })();
+    /* red border + warning only appear AFTER the user presses the (disabled-looking)
+       "내용 정리하기" button while invalid; before that, never red. After the first
+       attempt, validity re-checks on blur. */
+    const [nameInvalid, setNameInvalid] = useState(false);
+    const [attempted, setAttempted] = useState(false);
+    const [transcriptInvalid, setTranscriptInvalid] = useState(false);
+    /* brand-name validity used for the button is committed on blur only (not while typing) */
+    const [nameCommitted, setNameCommitted] = useState(() => nameValid);
+    const disabled = value.trim().length === 0 || !nameCommitted || nameInvalid;
+    const handleSubmitClick = () => {
+      if (!nameValid) { setAttempted(true); setNameInvalid(true); setNameCommitted(false); return; }
+      if (value.trim().length === 0) { setTranscriptInvalid(true); return; }
+      onNext();
+    };
+
+    const cardBorder = transcriptInvalid && !focus ? '#e0483d' : focus ? '#2BB8C9' : '#dcdedb';
+    const cardShadow = transcriptInvalid && !focus ? '0 0 0 4px rgba(224,72,61,0.10)' : focus ? '0 0 0 4px rgba(43,184,201,0.10)' : 'none';
+
+    return (
+      <div style={s1.page}>
+        <div style={s1.frame}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 7 }}>
+            <h1 style={{ ...s1.pageTitle, margin: '0 0 0 4px' }}>새 작업</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: '0 1 auto' }}>
+              {nameInvalid && (
+                <p style={{ margin: 0, fontSize: 12, color: '#e0483d', lineHeight: 1.4, textAlign: 'right', maxWidth: 360 }}>
+                  특수문자나 자음, 모음만 있는 글자는 사용할 수 없습니다.<br />
+                  온전한 글자로만 이루도록 정정해주세요.
+                </p>
+              )}
+              <div style={{ width: 300 }}>
+                <input
+                  value={brandName || ''}
+                  onChange={(e)=>onBrandName && onBrandName(e.target.value)}
+                  onBlur={()=>{ setNameCommitted(nameValid); if (attempted) setNameInvalid(!nameValid); }}
+                  placeholder="내 회사 브랜드명"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    border: nameInvalid ? '1.5px solid #e0483d' : '1px solid var(--field-line)',
+                    borderRadius: 8,
+                    padding: '10px 12px', fontSize: 14, color: '#111212', outline: 'none',
+                    fontFamily: 'inherit', background: '#fff',
+                    boxShadow: nameInvalid ? '0 0 0 3px rgba(224,72,61,0.10)' : 'none',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <section style={{ ...s1.card, borderColor: cardBorder, boxShadow: cardShadow }}>
+            <header>
+              <h2 style={s1.cardTitle}>1단계 — 고객 상담 대화 붙여넣기</h2>
+              <p style={s1.cardSub}>고객과 나눈 대화를 통째로 붙여넣으면, 요청 내용과 1차 시안을 한 번에 정리해 드립니다.</p>
+            </header>
+
+            <textarea
+              ref={taRef}
+              value={value}
+              onChange={(e)=>{ onChange(e.target.value); if (e.target.value.trim()) setTranscriptInvalid(false); }}
+              onFocus={()=>{ setFocus(true); setTranscriptInvalid(false); }}
+              onBlur={()=>setFocus(false)}
+              placeholder="예) [고객] 안녕하세요, 작은 카페를 열려고 하는데…"
+              style={s1.textarea}
+            />
+
+            <div style={s1.cardFoot}>
+              <button type="button" onClick={fillExample} style={s1.exampleLink}>
+                예시 넣어보기 (달구름 카페)
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitClick}
+                style={{
+                  ...s1.cta,
+                  opacity: disabled ? 0.4 : 1,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                내용 정리하기
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  const s1 = {
+    page: {
+      minHeight: '100vh',
+      background: 'var(--bg)',
+      display: 'flex', justifyContent: 'center',
+      padding: '56px 24px 40px',
+    },
+    frame: { width: 'min(960px, 100%)' },
+    pageTitle: { margin: '0 0 22px 4px', fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em', color: '#111212' },
+    card: {
+      background: '#fff',
+      border: '1.5px solid #dcdedb',
+      borderRadius: 14,
+      padding: '22px 24px 18px',
+      transition: 'border-color 140ms ease, box-shadow 140ms ease',
+    },
+    cardTitle: { margin: 0, fontSize: 16, fontWeight: 700, color: '#111212', letterSpacing: '-0.005em' },
+    cardSub: { margin: '6px 0 18px', color: '#6b6f6e', fontSize: 13, lineHeight: 1.55 },
+    textarea: {
+      width: '100%', minHeight: 320,
+      border: 'none', outline: 'none', resize: 'vertical',
+      background: 'transparent', fontSize: 14, lineHeight: 1.65, color: '#2a2c2c',
+      padding: '4px 2px',
+      fontFamily: 'inherit',
+    },
+    cardFoot: {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      marginTop: 12, paddingTop: 12,
+    },
+    exampleLink: {
+      background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+      color: '#6b6f6e', fontSize: 12.5, textDecoration: 'underline', textDecorationColor: '#c9ccc7',
+      textUnderlineOffset: 3,
+    },
+    cta: {
+      background: '#111212', color: '#fff', border: 'none',
+      padding: '9px 18px', borderRadius: 8,
+      fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.005em',
+    },
+  };
+
+  /* ---------- step 3: logos (placeholder svgs) ---------- */
+  function LogoA({ solid=false, color='#003894' }){ /* Rocket + Saturn — A Direct */
+    const fill = solid ? color : 'url(#lga)';
+    const ring = solid ? color : '#2a72d0';
+    const tail = solid ? color : '#1a5dc7';
+    return (
+      <svg viewBox="0 0 120 120" width="100%" height="100%">
+        <defs>
+          <linearGradient id="lga" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1a5dc7" /><stop offset="100%" stopColor="#002b78" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="60" cy="64" rx="46" ry="14" fill="none" stroke={ring} strokeWidth="2.5" transform="rotate(-18 60 64)" />
+        <path d="M60 20 C72 36, 76 52, 72 70 L60 78 L48 70 C44 52, 48 36, 60 20 Z" fill={fill} />
+        <circle cx="60" cy="46" r="6" fill={solid ? '#fff' : '#cfe2ff'} opacity={solid ? 0.5 : 1} />
+        <path d="M48 70 L42 88 L52 80 Z" fill={tail} />
+        <path d="M72 70 L78 88 L68 80 Z" fill={tail} />
+      </svg>
+    );
+  }
+  function LogoB({ solid=false, color='#003894' }){ /* Paper plane / leaf — B Abstract */
+    const fill = solid ? color : 'url(#lgb)';
+    return (
+      <svg viewBox="0 0 120 120" width="100%" height="100%">
+        <defs>
+          <linearGradient id="lgb" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stopColor="#003894" /><stop offset="100%" stopColor="#2a8fe6" />
+          </linearGradient>
+        </defs>
+        <path d="M22 96 C40 70, 60 50, 96 24 C82 60, 64 84, 36 100 Z" fill={fill} />
+        <path d="M22 96 L96 24" stroke="#fff" strokeWidth="2" opacity="0.45" />
+        <circle cx="80" cy="86" r="6" fill={solid ? color : '#2a8fe6'} />
+      </svg>
+    );
+  }
+  function LogoC({ solid=false, color='#003894' }){ /* Rocket/plane silhouette — C Alternative */
+    const fill = solid ? color : 'url(#lgc)';
+    const acc1 = solid ? color : '#003894';
+    const acc2 = solid ? color : '#1a5dc7';
+    return (
+      <svg viewBox="0 0 120 120" width="100%" height="100%">
+        <defs>
+          <linearGradient id="lgc" x1="1" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="#001a52" /><stop offset="100%" stopColor="#2a72d0" />
+          </linearGradient>
+        </defs>
+        <path d="M28 92 L96 24 L96 60 L60 88 Z" fill={fill} />
+        <path d="M28 92 L60 88 L52 100 Z" fill={acc1} />
+        <path d="M96 24 L82 38 L96 44 Z" fill={acc2} />
+      </svg>
+    );
+  }
+  function LogoD({ solid=false, color='#003894' }){ /* Droplet + arrow + spark — D Compound */
+    const fill = solid ? color : 'url(#lgd)';
+    return (
+      <svg viewBox="0 0 120 120" width="100%" height="100%">
+        <defs>
+          <linearGradient id="lgd" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2a8fe6" /><stop offset="100%" stopColor="#001a52" />
+          </linearGradient>
+        </defs>
+        <path d="M60 14 C82 44, 92 68, 80 86 C72 100, 48 100, 40 86 C28 68, 38 44, 60 14 Z" fill={fill} />
+        <path d="M52 80 L72 50 L66 50 L78 32 L74 56 L68 56 Z" fill="#fff" opacity="0.95" />
+        <circle cx="88" cy="30" r="3" fill={solid ? '#fff' : '#cfe2ff'} opacity={solid ? 0.6 : 1} />
+        <circle cx="96" cy="22" r="2" fill={solid ? '#fff' : '#cfe2ff'} opacity={solid ? 0.6 : 1} />
+      </svg>
+    );
+  }
+
+  const CANDIDATES = [
+    { id: 'A', label: 'Direct',      sub: '모티프 직접 결합',
+      desc: '가장 직접적인 상승 —\n우상향으로 떠오르는 단일 곡선 한 획',
+      Logo: LogoA },
+    { id: 'B', label: 'Abstract',    sub: '순수 기하 추상',
+      desc: '굵은 솔리드 덩어리에 종이비행기를 한 음각으로 한 번 —\n비상·성장의 추상화',
+      Logo: LogoB },
+    { id: 'C', label: 'Alternative', sub: '인접 모티프 대체',
+      desc: '위로 솟는 로켓 실루엣 —\n도약의 가장 익숙한 은유',
+      Logo: LogoC },
+    { id: 'D', label: 'Compound',    sub: '다중 개념 압축',
+      desc: '솔리드 물방울 매스에 상승 화살표 음각 + 스파크 —\n추진·상승의 합성',
+      Logo: LogoD },
+  ];
+
+  function CandidateCard({ item, picked, disabledAdd, onAdd, color, svg, img }) {
+    const { Logo } = item;
+    const isPickedStyle = picked
+      ? { borderColor: '#111212', background: '#fafaf9' }
+      : { borderColor: '#e2e4e0', background: '#fff' };
+    return (
+      <div style={{ ...s3.candCard, ...isPickedStyle }}>
+        {picked && (
+          <span style={s3.pickedTag}><Check size={12} /><span style={{ marginLeft: 4 }}>담음</span></span>
+        )}
+        <div style={s3.logoBox}>{img ? <img src={img} alt="" style={{width:'95%',height:'95%',objectFit:'contain'}} /> : svg ? <div style={{width:'90%',height:'90%'}} dangerouslySetInnerHTML={{__html: svg}} /> : <Logo color={color} />}</div>
+        <div style={{ padding: '14px 14px 6px', flex: 1 }}>
+          <div style={s3.cardLabel}>
+            <span style={s3.cardLabelLetter}>{item.id}</span>
+            <span style={{ marginLeft: 6 }}>{item.label}</span>
+            <span style={{ color: '#9a9d97', margin: '0 4px' }}>—</span>
+            <span style={{ color: '#5a5e5a', fontWeight: 500 }}>{item.sub}</span>
+          </div>
+          <p style={s3.cardDesc}>{item.desc}</p>
+        </div>
+        <div style={{ padding: '0 12px 12px' }}>
+          {picked ? (
+            <button type="button" disabled style={{ ...s3.btnAdd, ...s3.btnAddDisabled }}>
+              <Check size={12} color="#7a7e79" /><span style={{ marginLeft: 6 }}>담음</span>
+            </button>
+          ) : (
+            <button type="button" onClick={onAdd} disabled={disabledAdd}
+              style={{ ...s3.btnAdd, opacity: disabledAdd ? 0.45 : 1, cursor: disabledAdd ? 'not-allowed' : 'pointer' }}>
+              <span style={{ fontWeight: 500, marginRight: 4 }}>＋</span>담기
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function PickedCard({ item, onRemove, color, svg, img }) {
+    const { Logo } = item;
+    return (
+      <div style={s3.pickedCard}>
+        <button type="button" onClick={onRemove} aria-label="제거" style={s3.removeBtn}>×</button>
+        <div style={s3.pickedLogoBox}>{img ? <img src={img} alt="" style={{width:'96%',height:'96%',objectFit:'contain'}} /> : svg ? <div style={{width:'92%',height:'92%'}} dangerouslySetInnerHTML={{__html: svg}} /> : <Logo color={color} />}</div>
+        <div style={{ padding: '12px 14px 14px' }}>
+          <div style={s3.cardLabel}>
+            <span style={{ marginLeft: 0 }}>{item.label}</span>
+            <span style={{ color: '#9a9d97', margin: '0 4px' }}>—</span>
+            <span style={{ color: '#5a5e5a', fontWeight: 500 }}>{item.sub}</span>
+          </div>
+          <p style={{ ...s3.cardDesc, margin: '6px 0 0' }}>{item.desc}</p>
+        </div>
+      </div>
+    );
+  }
+
+  function Step3View({ onBack, onNext, onSelectStep, picked, setPicked, concept, primary, secondary, genSvgs, setGenSvgs, motif, directions }) {
+    const [loading, setLoading] = useState(() => Object.keys(genSvgs || {}).length === 0);
+    const [seed, setSeed] = useState(0); // bumps on "다시 만들기"
+    const [backendUrl, setBackendUrl] = useState(() => {
+      const stored = localStorage.getItem('backendUrl');
+      return stored !== null ? stored : 'https://recraft-logo.onrender.com';
+    });
+    const [editingUrl, setEditingUrl] = useState(false);
+    const [genImages, setGenImages] = useState({}); // Recraft backend image URLs (if configured)
+    const [genPrompt, setGenPrompt] = useState(() => localStorage.getItem('genPrompt') || ''); // optional extra direction
+    const [refImages, setRefImages] = useState(() => {
+      try {
+        const stored = localStorage.getItem('refImages');
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    }); // up to 4 reference image data URLs
+    const [dragOver, setDragOver] = useState(false);
+    const fileRef = useRef(null);
+    
+    const saveUrl = (url) => {
+      setBackendUrl(url);
+      localStorage.setItem('backendUrl', url);
+      setEditingUrl(false);
+    };
+
+    // Auto-save backendUrl to localStorage whenever it changes
+    useEffect(() => {
+      localStorage.setItem('backendUrl', backendUrl);
+    }, [backendUrl]);
+
+    // Auto-save genPrompt to localStorage whenever it changes
+    useEffect(() => {
+      localStorage.setItem('genPrompt', genPrompt);
+    }, [genPrompt]);
+
+    // Auto-save refImages to localStorage whenever it changes
+    useEffect(() => {
+      try {
+        localStorage.setItem('refImages', JSON.stringify(refImages));
+      } catch (e) {
+        console.warn('Failed to save refImages to localStorage:', e);
+      }
+    }, [refImages]);
+
+    const addImages = (fileList) => {
+      const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
+      const room = 4 - refImages.length;
+      files.slice(0, room).forEach(f => {
+        const reader = new FileReader();
+        reader.onload = () => setRefImages(prev => prev.length < 4 ? [...prev, reader.result] : prev);
+        reader.readAsDataURL(f);
+      });
+    };
+    const removeImage = (i) => setRefImages(prev => prev.filter((_, idx) => idx !== i));
+
+    const candidatesWithDesc = useMemo(() => {
+      const motifWords = (motif || '').split(',').map(s => s.trim()).filter(Boolean);
+      const dirs = (Array.isArray(directions) ? directions : []).filter(Boolean);
+      return CANDIDATES.map((c, i) => {
+        const mw = motifWords.length > 0 ? motifWords[i % motifWords.length] : null;
+        const dw = dirs.length > 0 ? dirs[i % dirs.length] : null;
+        if (!mw && !dw) return c;
+        const lines = [];
+        if (mw) lines.push(`모티프 「${mw}」— ${c.sub} 방식으로 형태화`);
+        if (dw) lines.push(`방향: ${dw}`);
+        lines.push({
+          A: '인상: 즉각적·직관적 — 봤을 때 바로 이해되는 명쾌함',
+          B: '인상: 냉철하고 구조적 — 설계된 느낌의 절제된 고급감',
+          C: '인상: 친숙하되 세련됨 — 누구나 공감하는 보편적 강렬함',
+          D: '인상: 복합적 에너지 — 여러 의미가 압축된 밀도 높은 심볼',
+        }[c.id] || '인상: 단색 절제 심볼 · 고급스럽고 강렬한 실루엣');
+        return { ...c, desc: lines.join('\n') };
+      });
+    }, [motif, directions]);
+    const candidatesRef = useRef(candidatesWithDesc);
+    useEffect(() => { candidatesRef.current = candidatesWithDesc; }, [candidatesWithDesc]);
+
+    const genRef = useRef(0);
+
+    /* ── 방법 A: 참고 이미지 → 실루엣 추출 (클라이언트 측, 비전모델 불필요) ──
+       사진을 그리드로 다운샘플 → 배경색 추정 → 전경 셀만 모아 실루엣 형태를 얻는다. */
+    const buildSilhouette = (dataUrl) => new Promise((resolve) => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          const G = 44;
+          const cv = document.createElement('canvas');
+          cv.width = G; cv.height = G;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0, G, G);
+          const d = ctx.getImageData(0, 0, G, G).data;
+          const at = (x, y) => { const i = (y*G+x)*4; return [d[i], d[i+1], d[i+2], d[i+3]]; };
+          /* estimate background from the 4 corners + edges average */
+          let br=0,bg=0,bb=0,bn=0;
+          for (let x=0; x<G; x++){ for (const y of [0, G-1]){ const [r,g,b,a]=at(x,y); if(a>40){br+=r;bg+=g;bb+=b;bn++;} } }
+          for (let y=0; y<G; y++){ for (const x of [0, G-1]){ const [r,g,b,a]=at(x,y); if(a>40){br+=r;bg+=g;bb+=b;bn++;} } }
+          br/=bn||1; bg/=bn||1; bb/=bn||1;
+          const dist = (r,g,b) => Math.abs(r-br)+Math.abs(g-bg)+Math.abs(b-bb);
+          const grid = [];
+          let minX=G, minY=G, maxX=0, maxY=0, count=0;
+          for (let y=0; y<G; y++){
+            grid[y] = [];
+            for (let x=0; x<G; x++){
+              const [r,g,b,a] = at(x,y);
+              const fg = a > 80 && dist(r,g,b) > 90;
+              grid[y][x] = fg ? 1 : 0;
+              if (fg){ count++; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+            }
+          }
+          /* if almost everything or almost nothing is foreground, treat as failed */
+          if (count < 12 || count > G*G*0.92) { resolve(null); return; }
+          resolve({ grid, G, minX, minY, maxX, maxY });
+        };
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+      } catch (e) { resolve(null); }
+    });
+
+    /* convert a silhouette grid into an SVG (120×120), merging each row's runs into rects */
+    const silhouetteSvg = (sil, opts) => {
+      if (!sil) return null;
+      const { grid, minX, minY, maxX, maxY } = sil;
+      const w = (maxX - minX + 1), h = (maxY - minY + 1);
+      const pad = 18, box = 120 - pad*2;
+      const scale = box / Math.max(w, h);
+      const offX = pad + (box - w*scale)/2, offY = pad + (box - h*scale)/2;
+      const color = opts.color || '#003894';
+      const outline = opts.outline;
+      const rx = opts.round ? Math.min(scale, 4)*0.35 : 0;
+      const rects = [];
+      for (let y = minY; y <= maxY; y++){
+        let x = minX;
+        while (x <= maxX){
+          if (grid[y][x]){
+            let x2 = x;
+            while (x2+1 <= maxX && grid[y][x2+1]) x2++;
+            const rxp = (offX + (x-minX)*scale).toFixed(1);
+            const ryp = (offY + (y-minY)*scale).toFixed(1);
+            const rw = ((x2-x+1)*scale + 0.6).toFixed(1);
+            const rh = (scale + 0.6).toFixed(1);
+            rects.push(`<rect x="${rxp}" y="${ryp}" width="${rw}" height="${rh}" rx="${rx.toFixed(1)}"/>`);
+            x = x2+1;
+          } else x++;
+        }
+      }
+      const fillAttr = outline ? `fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"` : `fill="${color}"`;
+      return `<svg viewBox="0 0 120 120" width="100%" height="100%"><g ${fillAttr}>${rects.join('')}</g></svg>`;
+    };
+
+    const extractPalette = (dataUrl) => new Promise((resolve) => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          const n = 24;
+          const cv = document.createElement('canvas');
+          cv.width = n; cv.height = n;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0, n, n);
+          const data = ctx.getImageData(0, 0, n, n).data;
+          const buckets = {};
+          for (let i = 0; i < data.length; i += 4) {
+            const a = data[i+3]; if (a < 128) continue;
+            const r = data[i] & 0xF0, g = data[i+1] & 0xF0, b = data[i+2] & 0xF0;
+            // skip near-white/near-black background
+            const lum = 0.3*r + 0.59*g + 0.11*b;
+            if (lum > 236 || lum < 18) continue;
+            const key = (r<<16)|(g<<8)|b;
+            buckets[key] = (buckets[key]||0) + 1;
+          }
+          const top = Object.entries(buckets).sort((a,b)=>b[1]-a[1]).slice(0,3)
+            .map(([k]) => { const v=+k; return '#' + (v>>16&255).toString(16).padStart(2,'0') + (v>>8&255).toString(16).padStart(2,'0') + (v&255).toString(16).padStart(2,'0'); });
+          resolve(top);
+        };
+        img.onerror = () => resolve([]);
+        img.src = dataUrl;
+      } catch (e) { resolve([]); }
+    });
+
+    const extractSvg = (txt) => {
+      if (!txt) return null;
+      const m = String(txt).match(/<svg[\s\S]*?<\/svg>/i);
+      if (!m) return null;
+      let svg = m[0];
+      if (!/viewBox=/i.test(svg)) svg = svg.replace(/<svg/i, '<svg viewBox="0 0 120 120"');
+      return svg.replace(/width="[^"]*"/i,'').replace(/height="[^"]*"/i,'');
+    };
+    const genOne = async (c, refHint) => {
+      const parts = [
+`<역할>
+당신은 럭셔리 브랜드 전문 심볼 디자이너입니다. 글자 없이 형태 하나만으로
+브랜드를 각인시키는 마크(심볼)를 설계합니다. 당신의 작업물은 "그린 것"이
+아니라 "설계된 것"으로 평가받으며, 가격이 높아도 구매 충동이 일어나게 만듭니다.
+</역할>
+
+<브랜드_입력>
+아래 <브랜드_입력_실제값> 블록에 실제 브랜드 데이터가 주입됩니다.
+핵심 모티프 / 분위기 / 스타일 방향 / 주·보조 색상 / 피해야 할 것을 모두 반영하십시오.
+모티프 결합 방식은 이 시안에 지정된 방식(A~D 중 하나)을 따릅니다:
+[다중 개념 압축 / 모티프 직접 결합 / 인접 모티프 대체 / 순수 기하 추상]
+</브랜드_입력>
+
+<!-- ===== 절대 규칙: 글자 없는 심볼만 ===== -->
+<출력_범위 우선순위="최상">
+글자·문자·숫자·로고타입·브랜드명·서브카피를 일절 포함하지 않습니다.
+오직 추상·회화·기하 형태로 이루어진 심볼 마크 하나만 생성합니다.
+어떤 텍스트도 이미지 안에 렌더링하지 않습니다.
+</출력_범위>
+
+<!-- ===== 1순위: 반드시 지킬 핵심 원칙 ===== -->
+<핵심_원칙 우선순위="최상">
+1. 의미 우선: 핵심 가치 3개를 단 하나의 개념으로 압축한 뒤, 그 개념에서
+   형태를 도출합니다. 예쁜 형태를 먼저 만들지 않습니다.
+2. 색의 절제: 색은 1~2색으로 제한합니다(무채색 또는 흙빛 톤 + 포인트 컬러 1개).
+3. 여백: 마크 주위에 충분한 여백을 둡니다. 형태를 과하게 채우지 않습니다.
+4. 벡터 정합: 선과 면을 명확히 하여 축소·단색·반전에도 형태가 유지되게 합니다.
+5. 형태 가독성: 글자가 없으므로 실루엣만으로 즉시 식별·기억되게 합니다.
+6. 결합 논리: 모티프를 의미 없이 나열하지 않고, 선택한 결합 방식의 규칙대로 구성합니다.
+</핵심_원칙>
+
+<!-- ===== 사고 단계: 형태를 그리기 전에 반드시 추론 ===== -->
+<사고_단계 우선순위="최상">
+디자인 전에 다음을 먼저 추론하십시오. (건너뛰지 마십시오.)
+1. 핵심 가치 3개를 관통하는 하나의 개념으로 압축합니다.
+2. 글자 없이 그 개념을 전달할 형태·기하·모티프를 결정합니다.
+3. 선택한 결합 방식의 규칙에 따라 구성 논리를 세웁니다.
+4. "이 형태가 왜 이렇게 생겼는가"를 한 문장으로 설명할 수 있는지 점검하고,
+   설명되지 않으면 1번으로 돌아갑니다.
+</사고_단계>
+
+<!-- ===== 3순위: 스타일 방향 (톤·업종에 맞게 택일) ===== -->
+<스타일_방향 우선순위="중">
+- 회화적 마크: 모티프(동물·식물·건축 등)를 절제된 실루엣으로 단순화
+- 기하 추상: 순수 도형의 비례와 균형으로 개념 전달
+- 음각/여백 활용: 형태 사이 빈 공간으로 두 번째 의미를 드러냄
+선택한 계열 안에서도 디테일은 최소로 유지합니다.
+</스타일_방향>
+
+<!-- ===== 시각 스타일: 플랫 기하 단색 마크 (고급) ===== -->
+<시각_스타일 우선순위="최상">
+"플랫 기하 단색 마크" 스타일로 설계한다.
+- 단색 1색만 사용(짙고 차분한 톤: 딥 네이비·포레스트 그린·차콜 등 위 색상값 우선). 그라데이션·광택·그림자 금지.
+- 모티프를 직선·다각형 면으로 환원한다. 곡선은 최소화하고 수직·사선 위주로 구성한다.
+- 면과 면 사이를 가는 배경색 틈(음각)으로 분절하여 형태와 리듬을 만든다.
+- 높이·크기가 다른 면을 질서 있게 배열해 안정적인 구조와 리듬을 만든다.
+- 디테일은 점·작은 사각형 한두 개로 극도로 절제한다. 나머지는 큰 면으로 비운다.
+- 마크 주위 여백을 충분히 둔다(약 20%). viewBox를 꽉 채우지 않는다.
+- 인상: 견고함, 신뢰, 프리미엄. "그린 것"이 아니라 "설계된 것"으로 보이게.
+</시각_스타일>
+
+<!-- ===== 금지 ===== -->
+<금지 우선순위="상">
+- 모든 글자·문자·숫자·텍스트(가짜 글자, 장식 캡션 포함)
+- 그라데이션 남용, 무지개·네온 색, 가짜 3D·금속 광택
+- 과도한 디테일, 래스터 노이즈, 화면을 꽉 채우는 구성
+- 진부한 클립아트 모티프, 의미 없는 장식
+</금지>
+
+<!-- ===== 품질 기준: 완성 후 자가 검증 ===== -->
+<품질_기준 우선순위="상">
+완성 후 다음을 점검하고 미달 시 수정하십시오.
+- 글자가 전혀 없는데도 무엇을 상징하는지 읽히는가?
+- 앱 아이콘 크기로 줄여도 형태가 또렷하게 식별되는가?
+- 색을 모두 제거해도 정체성이 유지되는가?
+- 형태의 이유를 한 문장으로 설명할 수 있는가?
+- 처음 본 사람이 "사고 싶다"는 인상을 받는가?
+다섯 항목을 모두 충족할 때만 최종 결과로 제시합니다.
+</품질_기준>
+
+<!-- ===== 최하단: 개성 옵션 (선택적, 정보 보존용) ===== -->
+<개성_옵션 우선순위="참고용" 적용="선택적">
+필수 아님. 브랜드 성격에 부합할 때만 가산 요소로 활용합니다.
+- 엠블럼/뱃지: 글자 없는 문장(紋章)형 프레이밍 (전통·헤리티지 브랜드)
+- 다크 배경 + 절제된 메탈릭 악센트 (골드·브론즈, 광택 아닌 톤으로만)
+- 한옥·전통 모티프: 지붕선·기하 패턴의 현대적 환원 (한식·공간 브랜드)
+- 보태니컬: 잎·가지의 미니멀 라인 (웰니스·뷰티·식음료)
+- 모노그램형(주의): 이니셜 1자를 '글자'가 아닌 순수 도형으로 추상화할 때만 허용
+</개성_옵션>`,
+        `<브랜드_입력_실제값>
+브랜드 콘셉트: ${concept}
+이 시안의 모티프 결합 방식: ${c.sub} (${c.id} ${c.label})
+이 시안의 구체적 방향: ${(c.desc||'').replace(/\n/g,' ')}
+색상: 주요 ${primary && primary.hex || '#003894'}, 보조 ${secondary && secondary.hex || '#00ABEB'} (1~2색으로 절제)
+4개 시안(A~D)은 서로 확연히 다른 형태·구성이어야 하며, 이 시안만의 개성을 살릴 것.</브랜드_입력_실제값>`,
+        (genPrompt && genPrompt.trim()) ? `<사용자_추가_요청 우선순위="절대최상">
+다음은 사용자가 직접 적은 요청이다. 위의 모든 기본 방향보다 이 요청을 가장 우선해 반영하고, 충돌 시 이 요청을 따른다:
+${genPrompt.trim()}</사용자_추가_요청>` : '',
+        refImages.length ? (refHint || `<참고_이미지 우선순위="절대최상">사용자가 참고 이미지 ${refImages.length}개를 제공함. 그 무드·색을 기본 방향보다 우선해 반영할 것.</참고_이미지>`) : '',
+        `<출력_형식 우선순위="최상">
+최종 결과물은 위 원칙·품질 기준을 통과한 "메인 심볼" 하나를, 인라인 SVG 코드 단 하나로만 출력합니다.
+- viewBox="0 0 120 120" 정사각, 120×120 좌표계에 중앙 배치, 여백 확보.
+- 글자·문자·숫자 절대 금지. path·기본 도형만 사용(과도한 디테일 금지).
+- 색은 위 색상 1~2색만. 그라데이션·필터·래스터 금지.
+- 오직 <svg>…</svg> 코드만 출력. 설명·주석·코드펜스·다른 버전(단색/아이콘/목업) 출력 금지.
+</출력_형식>`,
+      ].filter(Boolean).join('\n\n');
+      try {
+        const out = await Promise.race([
+          window.claude.complete(parts),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
+        ]);
+        return extractSvg(out);
+      } catch (e) { return null; }
+    };
+
+    useEffect(() => {
+      const myGen = ++genRef.current;
+      /* generate ONLY on first entry without a cached set, or on 다시 만들기 (seed bump).
+         Re-entering step 3 with an existing set reuses it (no regeneration). */
+      if (seed === 0 && Object.keys(genSvgs || {}).length > 0) { setLoading(false); return; }
+      setLoading(true);
+      setGenSvgs({});
+      setGenImages({});
+      /* ① If a logo-generation backend (Recraft) is configured, use it first.
+         The backend returns { images: { A,B,C,D: url } }. On any failure we fall
+         back to the built-in SVG/silhouette generation below. */
+      const apiUrl = backendUrl || window.LOGO_GEN_API_URL;
+      if (apiUrl && apiUrl.trim()) {
+        (async () => {
+          try {
+            const palettes = refImages.length ? (await Promise.all(refImages.map(extractPalette))).flat() : [];
+            const body = {
+              brandConcept: concept,
+              primaryHex: (primary && primary.hex) || '#003894',
+              secondaryHex: (secondary && secondary.hex) || '',
+              userPrompt: (genPrompt || '').trim(),
+              refColors: [...new Set(palettes)].slice(0, 6),
+              variantKeys: ['A'], // ★ 임시: A 1개만 생성 (테스트용, 나중에 ['A','B','C','D']로 변경)
+            };
+            const res = await Promise.race([
+              fetch(apiUrl.trim().replace(/\/$/, '') + '/api/generate-logos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 40000)),
+            ]);
+            const json = await res.json();
+            if (genRef.current !== myGen) return;
+            const imgs = (json && json.images) || {};
+            if (imgs.A || imgs.B || imgs.C || imgs.D) {
+              setGenImages(imgs);
+              setLoading(false);
+              return;
+            }
+          } catch (e) { /* fall through to built-in generation */ }
+          if (genRef.current === myGen) runBuiltIn();
+        })();
+        return;
+      }
+      runBuiltIn();
+
+      function runBuiltIn(){
+      const canClaude = window.claude && typeof window.claude.complete === 'function';
+      if (!canClaude) {
+        const t = setTimeout(() => { if (genRef.current === myGen) setLoading(false); }, 1500);
+        return () => clearTimeout(t);
+      }
+      (async () => {
+        /* If reference images exist → 방법 A: extract a silhouette from the first
+           usable image and render the 4 시안 as styled variants of that real shape. */
+        if (refImages.length) {
+          let sil = null;
+          for (const src of refImages) { sil = await buildSilhouette(src); if (sil) break; }
+          if (genRef.current !== myGen) return;
+          if (sil) {
+            const p = (primary && primary.hex) || '#003894';
+            const s = (secondary && secondary.hex) || '#00ABEB';
+            const variants = {
+              A: silhouetteSvg(sil, { color: p }),                 // 솔리드
+              B: silhouetteSvg(sil, { color: p, outline: true }),  // 외곽선
+              C: silhouetteSvg(sil, { color: s }),                 // 보조색 솔리드
+              D: silhouetteSvg(sil, { color: p, round: true }),    // 둥근 솔리드
+            };
+            const map = {};
+            CANDIDATES.forEach(c => { if (variants[c.id]) map[c.id] = variants[c.id]; });
+            setGenSvgs(map);
+            setLoading(false);
+            return;
+          }
+          /* silhouette failed → fall through to color-hinted Claude generation below */
+        }
+        /* The text-only generator can't SEE photos. Extract each reference image's
+           dominant colors client-side and feed them in as a concrete palette hint
+           so reference images genuinely influence the result. */
+        let refHint = '';
+        if (refImages.length) {
+          try {
+            const palettes = await Promise.all(refImages.map(extractPalette));
+            const cols = [...new Set(palettes.flat())].slice(0, 6);
+            if (cols.length) {
+              refHint = `<참고_이미지 우선순위="절대최상">사용자가 참고 이미지 ${refImages.length}개를 제공함. 이미지에서 추출한 핵심 색은 [${cols.join(', ')}] 이다. 이 색감·톤을 기본 색상보다 우선해 심볼에 적극 반영할 것. (형태는 위 브리프 모티프를 따르되 색·분위기는 참고 이미지를 우선)</참고_이미지>`;
+            }
+          } catch (e) { refHint = ''; }
+        }
+        let results = [];
+        try {
+          results = await Promise.race([
+            Promise.all(candidatesRef.current.map(c => genOne(c, refHint))),
+            new Promise((res) => setTimeout(() => res([]), 24000)),
+          ]) || [];
+        } catch (e) { results = []; }
+        if (genRef.current !== myGen) return;
+        const map = {};
+        CANDIDATES.forEach((c, i) => { if (results[i]) map[c.id] = results[i]; });
+        setGenSvgs(map);
+        setLoading(false);
+      })();
+      } /* end runBuiltIn */
+    }, [seed, backendUrl]);
+
+    const remake = () => { setPicked([]); setSeed(s => s + 1); };
+    const CAND_ORDER = CANDIDATES.map(c => c.id);
+    const pickedItems = picked
+      .map(id => candidatesWithDesc.find(c => c.id === id))
+      .filter(Boolean)
+      .sort((a, b) => CAND_ORDER.indexOf(a.id) - CAND_ORDER.indexOf(b.id));
+    const canPickMore = picked.length < 3;
+
+    const add = (id) => {
+      if (picked.includes(id) || !canPickMore) return;
+      setPicked([...picked, id]);
+    };
+    const remove = (id) => setPicked(picked.filter(p => p !== id));
+
+    return (
+      <div style={shell.page}>
+        <div style={shell.frame}>
+          <StepRail current={3} onSelect={onSelectStep} />
+          <main style={shell.content}>
+            <div style={shell.scroll}>
+              {/* header */}
+              <header style={{ marginBottom: 16 }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>
+                  3단계 — 1차 시안 고르기
+                </h1>
+                <p style={{ margin: '8px 0 0', color: '#6b6f6e', fontSize: 13.5, lineHeight: 1.65 }}>
+                  마음에 드는 시안을 <strong style={{ color: '#111212' }}>「담기」</strong>로 골라 두세요. <strong style={{ color: '#111212' }}>「다시 만들기」</strong>를 누르면 새 시안 4개가 나오지만, 골라 둔 시안은 그대로 유지됩니다. 여러 번 새로 만들어 보며 마음에 드는 것을 최대 3개까지 모으세요. 골라 둔 시안들이 제안서에 나란히 담겨 고객에게 전달되고, 고객이 그중 하나를 고르면 최종 납품됩니다. (고른 개수만큼 제안서에 담깁니다 · 최대 3개)
+                </p>
+              </header>
+
+              {/* meta row */}
+              <div style={s3.metaRow}>
+                <span style={s3.metaTag}>AI 자동 생성</span>
+                {!loading && <span style={s3.metaText}>생성 비용: 약 0원</span>}
+                <span style={s3.metaText}><span style={{ color: '#2a2c2c' }}>기본 콘셉트:</span> {concept || '정체에서 빠르게 도약·상승하는 우상향 동세를 굵고 절제된 추상 심볼로 — 딥네이비→시안 투톤'}</span>
+              </div>
+
+              {/* generation options: extra prompt + up to 4 reference images */}
+              <section style={s3.genPanel}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  <label style={s3.genLabel}>백엔드 URL <span style={{ color: '#9a9d97', fontWeight: 400 }}>(Recraft 로고 생성용)</span></label>
+                  {editingUrl ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        type="text"
+                        value={backendUrl}
+                        onChange={(e) => setBackendUrl(e.target.value)}
+                        autoFocus
+                        placeholder="https://recraft-logo-xxx.onrender.com"
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          border: '1px solid #2BB8C9',
+                          borderRadius: 6,
+                          fontSize: 13,
+                          fontFamily: 'monospace',
+                          outline: 'none',
+                        }}
+                        onBlur={(e) => {
+                          setBackendUrl(e.target.value);
+                          setEditingUrl(false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setBackendUrl(e.target.value);
+                            setEditingUrl(false);
+                          }
+                          if (e.key === 'Escape') setEditingUrl(false);
+                        }}
+                      />
+                      <button
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => saveUrl(backendUrl)}
+                        style={{
+                          padding: '8px 12px',
+                          background: '#2BB8C9',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        저장
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f6f7f4', borderRadius: 6 }}>
+                      <code style={{ flex: 1, fontSize: 12, color: '#2a2c2c', wordBreak: 'break-all' }}>{backendUrl}</code>
+                      <button
+                        onClick={() => setEditingUrl(true)}
+                        style={{
+                          padding: '4px 10px',
+                          background: '#fff',
+                          border: '1px solid #d0d3cf',
+                          borderRadius: 4,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        편집
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  <label style={s3.genLabel}>추가 프롬프트 <span style={{ color: '#9a9d97', fontWeight: 400 }}>(선택 — 원하는 방향을 직접 적어주세요)</span></label>
+                  <textarea
+                    value={genPrompt}
+                    onChange={(e)=>setGenPrompt(e.target.value)}
+                    placeholder="예) 더 둥글고 부드럽게 / 화살표 느낌 강조 / 미니멀하게…"
+                    style={s3.genTextarea}
+                  />
+                </div>
+                </div>
+                <div
+                  tabIndex={0}
+                  onDragOver={(e)=>{ e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={()=>setDragOver(false)}
+                  onDrop={(e)=>{ e.preventDefault(); setDragOver(false); if (e.dataTransfer && e.dataTransfer.files) addImages(e.dataTransfer.files); }}
+                  onPaste={(e)=>{
+                    const items = (e.clipboardData && e.clipboardData.items) || [];
+                    const files = [];
+                    for (const it of items) { if (it.type && it.type.startsWith('image/')) { const f = it.getAsFile(); if (f) files.push(f); } }
+                    if (files.length) { e.preventDefault(); addImages(files); }
+                  }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 6,
+                    outline: 'none', borderRadius: 8,
+                    boxShadow: dragOver ? '0 0 0 2px #2BB8C9' : 'none',
+                    transition: 'box-shadow 100ms ease',
+                  }}
+                >
+                  <label style={s3.genLabel}>참고 이미지 <span style={{ color: '#9a9d97', fontWeight: 400 }}>(선택 · 최대 4개)</span></label>
+                  <span style={{ fontSize: 11.5, color: '#9a9d97' }}>{refImages.length}/4 · 버튼·드래그·붙여넣기(Ctrl+V)로 추가됩니다.</span>
+                  <div style={s3.refRow}>
+                    {refImages.map((src, i) => (
+                      <div key={i} style={s3.refThumb}>
+                        <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        <button type="button" onClick={()=>removeImage(i)} aria-label="제거" style={s3.refRemove}>×</button>
+                      </div>
+                    ))}
+                    {refImages.length < 4 && (
+                      <button type="button" onClick={()=>fileRef.current && fileRef.current.click()} style={s3.refAdd}>
+                        <span style={{ fontSize: 20, lineHeight: 1, color: '#9a9d97' }}>＋</span>
+                        <span style={{ fontSize: 11, color: '#9a9d97' }}>이미지 추가</span>
+                      </button>
+                    )}
+                    <input ref={fileRef} type="file" accept="image/*" multiple
+                      onChange={(e)=>{ addImages(e.target.files); e.target.value=''; }}
+                      style={{ display: 'none' }} />
+                  </div>
+                </div>
+              </section>
+
+              {/* picked area */}
+              <section style={s3.pickedSection}>
+                <div style={s3.pickedHeader}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#2a2c2c' }}>고른 시안</span>
+                  <span style={{ fontSize: 13, color: '#7a7e79' }}>{picked.length}/3</span>
+                </div>
+                {pickedItems.length === 0 ? (
+                  <div style={s3.pickedEmpty}>
+                    아직 고른 시안이 없습니다. 아래에서 마음에 드는 시안을 「담기」 하세요.
+                  </div>
+                ) : (
+                  <div style={s3.pickedGrid}>
+                    {pickedItems.map(it => (
+                      <PickedCard key={it.id} item={it} onRemove={()=>remove(it.id)} color={primary?.hex} svg={genSvgs[it.id]} img={genImages[it.id]} />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* candidates / loading */}
+              {loading ? (
+                <div style={s3.loadingBox}>
+                  <div style={s3.spinner} />
+                  <span style={{ color: '#6b6f6e', fontSize: 13 }}>시안 4개를 만드는 중입니다… (1–2분)</span>
+                </div>
+              ) : (
+                <section style={s3.candGrid}>
+                  {candidatesWithDesc.map(c => (
+                    <CandidateCard
+                      key={`${seed}-${c.id}`}
+                      item={c}
+                      picked={picked.includes(c.id)}
+                      disabledAdd={!canPickMore}
+                      onAdd={()=>add(c.id)}
+                      color={primary?.hex}
+                      svg={genSvgs[c.id]}
+                      img={genImages[c.id]}
+                    />
+                  ))}
+                </section>
+              )}
+
+              <div style={{ height: 24 }} />
+            </div>
+
+            {/* footer */}
+            <footer style={footerStyle.bar}>
+              <button type="button" style={footerStyle.ghost} onClick={onBack}>이전</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 13, color: '#6b6f6e' }}>고른 시안 {picked.length}개</span>
+                <button type="button" onClick={remake}
+                  disabled={loading}
+                  style={{ ...footerStyle.ghost, opacity: loading ? 0.5 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                  <span aria-hidden style={{ marginRight: 6 }}>↺</span>다시 생성
+                </button>
+                <button type="button" onClick={onNext}
+                  disabled={picked.length === 0}
+                  style={{
+                    ...footerStyle.primary,
+                    opacity: picked.length === 0 ? 0.5 : 1,
+                    cursor: picked.length === 0 ? 'not-allowed' : 'pointer',
+                  }}>
+                  <Check size={12} /><span style={{ margin: '0 6px 0 6px' }}>글꼴 고르기</span><span aria-hidden>→</span>
+                </button>
+              </div>
+            </footer>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  const s3 = {
+    metaRow: {
+      display: 'flex', alignItems: 'center', gap: 18,
+      background: '#f6f7f4',
+      borderRadius: 8,
+      padding: '8px 14px',
+      marginBottom: 22,
+      flexWrap: 'wrap',
+    },
+    metaTag: {
+      display: 'inline-flex', alignItems: 'center',
+      padding: '3px 10px',
+      borderRadius: 999,
+      background: '#fff',
+      border: '1px solid #d3d6d2',
+      fontSize: 11.5, fontWeight: 600, color: '#2a2c2c',
+      whiteSpace: 'nowrap', flexShrink: 0,
+    },
+    metaText: { fontSize: 12, color: '#6b6f6e', lineHeight: 1.5 },
+    genPanel: {
+      display: 'grid', gridTemplateColumns: '1fr 264px', gap: 20,
+      background: '#f6f7f4', border: '1px solid #f0f1ee', borderRadius: 12,
+      padding: '14px 16px', marginBottom: 22,
+    },
+    genLabel: { fontSize: 13, fontWeight: 600, color: '#2a2c2c' },
+    genTextarea: {
+      width: '100%', boxSizing: 'border-box', minHeight: 132, resize: 'vertical',
+      border: '1px solid #d3d6d2', borderRadius: 8, padding: '9px 11px',
+      fontSize: 13.5, color: '#111212', outline: 'none', fontFamily: 'inherit', background: '#fff', lineHeight: 1.5,
+    },
+    refRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+    refThumb: {
+      colorScheme: 'light',
+      position: 'relative', width: 60, height: 60, borderRadius: 8, overflow: 'hidden',
+      border: '1px solid #dcdedb', background: '#fff', flexShrink: 0,
+    },
+    refRemove: {
+      position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%',
+      background: 'rgba(17,18,18,0.72)', color: '#fff', border: 'none', fontSize: 13, lineHeight: 1,
+      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    },
+    refAdd: {
+      width: 60, height: 60, borderRadius: 8, border: '1px dashed #c9ccc7', background: '#fff',
+      cursor: 'pointer', display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+      fontFamily: 'inherit', flexShrink: 0,
+    },
+    pickedSection: {
+      border: '1px dashed #d3d6d2',
+      borderRadius: 12,
+      padding: '14px 16px',
+      marginBottom: 22,
+      minHeight: 110,
+      background: '#fafaf8',
+    },
+    pickedHeader: {
+      display: 'flex', alignItems: 'center', gap: 10,
+      marginBottom: 10,
+    },
+    pickedEmpty: {
+      textAlign: 'center', color: '#7a7e79', fontSize: 13,
+      padding: '24px 0 18px',
+    },
+    pickedGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+      gap: 12,
+    },
+    pickedCard: {
+      colorScheme: 'light',
+      position: 'relative',
+      background: '#fff',
+      border: '1px solid #e2e4e0',
+      borderRadius: 12,
+      overflow: 'hidden',
+      maxWidth: 320,
+    },
+    pickedLogoBox: {
+      background: '#f4f6f4',
+      aspectRatio: '1.4 / 1',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '4px 6px',
+    },
+    removeBtn: {
+      position: 'absolute', top: 8, right: 8,
+      width: 24, height: 24, borderRadius: '50%',
+      background: '#e94545', color: '#fff', border: 'none',
+      fontSize: 16, lineHeight: 1, cursor: 'pointer',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 2,
+    },
+    candGrid: {
+      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: 14,
+    },
+    candCard: {
+      colorScheme: 'light',
+      position: 'relative',
+      background: '#fff',
+      border: '1px solid #e2e4e0',
+      borderRadius: 12,
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
+      transition: 'border-color 120ms ease, background 120ms ease',
+    },
+    pickedTag: {
+      position: 'absolute', top: 10, left: 10,
+      display: 'inline-flex', alignItems: 'center',
+      padding: '3px 9px', borderRadius: 999,
+      background: '#111212', color: '#fff', fontSize: 11, fontWeight: 600,
+      zIndex: 2,
+    },
+    logoBox: {
+      background: '#f4f6f4',
+      aspectRatio: '1.3 / 1',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '6px 10px',
+    },
+    cardLabel: {
+      fontSize: 12.5, fontWeight: 600, color: '#111212',
+      display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', rowGap: 2,
+    },
+    cardLabelLetter: {
+      display: 'inline-block', minWidth: 14, color: '#111212',
+    },
+    cardDesc: {
+      margin: '6px 0 0',
+      fontSize: 12, lineHeight: 1.55, color: '#6b6f6e',
+      whiteSpace: 'pre-line',
+    },
+    btnAdd: {
+      width: '100%',
+      background: '#111212', color: '#fff', border: 'none',
+      padding: '9px 0', borderRadius: 8,
+      fontSize: 13, fontWeight: 500,
+      cursor: 'pointer',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    },
+    btnAddDisabled: {
+      background: '#f1f2ef', color: '#7a7e79', cursor: 'not-allowed',
+    },
+    loadingBox: {
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 12, padding: '60px 0',
+    },
+    spinner: {
+      width: 22, height: 22, borderRadius: '50%',
+      border: '2px solid #d3d6d2', borderTopColor: '#5a5e5a',
+      animation: 'spin 0.8s linear infinite',
+    },
+  };
+
+  /* ---------- transcript → brief parsing (1단계 → 2단계 자동) ---------- */
+  function AccuracyBadge({ level = 'high' }){
+    const map = {
+      high: { label: '높음', bg: '#d8efe1', fg: '#1f6b3e', desc: '모든 항목이 빠짐없이 채워졌습니다' },
+      med:  { label: '중간', bg: '#fbecc7', fg: '#7a5a16', desc: '비었거나 미완성인 항목이 있어요' },
+      low:  { label: '낮음', bg: '#f3dada', fg: '#8a2c2c', desc: '대부분의 항목이 비어 있어요' },
+    };
+    const m = map[level] || map.high;
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '4px 12px', borderRadius: 999,
+        background: m.bg, color: m.fg,
+        fontSize: 12.5, fontWeight: 500,
+      }}>
+        <span>정확도: {m.label}</span>
+        <span style={{ opacity: 0.7, fontWeight: 400 }}>· {m.desc}</span>
+      </span>
+    );
+  }
+
+  /* ---------- industry profiles — each yields a full, coherent brief ---------- */
+  /* When step 1 transcript mentions an industry, we seed every downstream field
+     (업종/대상/모티프/분위기/스타일/색/표현방향/피해야할것) from its profile, then
+     let explicit keyword mentions in the transcript override individual fields. */
+  const INDUSTRY_PROFILES = [
+    {
+      key: 'kindergarten', match: /유치원|어린이집|키즈|유아|놀이방|아이들?\s*교육|보육/,
+      industry: '유아 보육·교육시설 운영업',
+      audience: '만 3~5세 미취학 아동과 30~40대 학부모',
+      motif: '새싹, 무지개, 풍선, 햇살, 손잡은 아이',
+      mood: '밝음, 따뜻함, 다정함, 안전, 즐거움',
+      style: '둥근 형태, 부드러운 곡선, 친근',
+      primary: { name: '따뜻한 코랄', hex: '#FF8A5B' },
+      secondary: { name: '맑은 하늘색', hex: '#5BC2E7' },
+      directions: ['새싹이 돋아나는 동세', '무지개 아치 형태', '풍선이 떠오르는 모습', '손을 맞잡은 둥근 형상'],
+      avoidMotif: '날카로운 형태, 어두운 색, 복잡한 디테일',
+      avoidStyle: '각진 모서리, 가는 선, 차가운 인상',
+    },
+    {
+      key: 'cafe', match: /카페|커피숍|커피\s*전문|로스터|에스프레소/,
+      industry: '비알코올음료점업(카페)',
+      audience: '20~40대 동네 주민·직장인',
+      motif: '원두, 김이 오르는 잔, 아침 햇살',
+      mood: '고요, 아늑함, 따뜻함, 여유',
+      style: '단순, 절제, 손그림 느낌',
+      primary: { name: '따뜻한 베이지', hex: '#C4A584' },
+      secondary: { name: '아이보리', hex: '#F2EBDA' },
+      directions: ['김이 피어오르는 동세', '원두 한 알의 단순화', '잔과 받침의 기하 구성', '아침 햇살이 비치는 결'],
+      avoidMotif: '자극적인 네온, 캐릭터',
+      avoidStyle: '복잡한 그라데이션, 유치한 일러스트',
+    },
+    {
+      key: 'bootcamp', match: /부트캠프|개발자\s*양성|코딩\s*교육|커리어\s*전환|it\s*교육/,
+      industry: '일반 교습학원업(IT·코딩)',
+      audience: '20~30대 커리어 전환 준비생, 취업·이직 준비하는 비전공자',
+      motif: '로켓 상승, 종이비행기, 상승 화살표, 우상향 곡선',
+      mood: '성장, 도약, 역동적, 전문성, 신뢰',
+      style: '굵은 솔리드, 단순, 절제, 추상',
+      primary: { name: '딥 네이비블루', hex: '#003894' },
+      secondary: { name: '밝은 시안', hex: '#00ABEB' },
+      directions: ['로켓이 솟아오르는 동세', '종이비행기가 위로 비상', '상승하는 화살표', '우상향으로 솟구치는 곡선'],
+      avoidMotif: '유치한 클립아트, 캐릭터/마스코트',
+      avoidStyle: '가는 선, 복잡한 디테일, 웹 아이콘 느낌',
+    },
+    {
+      key: 'bakery', match: /베이커리|빵집|제과|디저트|케이크|페이스트리/,
+      industry: '제과점업',
+      audience: '30~50대 주부·가족과 동네 주민',
+      motif: '밀 이삭, 갓 구운 빵, 오븐의 온기',
+      mood: '따뜻함, 고소함, 정성, 소박',
+      style: '둥근 형태, 손그림, 포근',
+      primary: { name: '구움색 브라운', hex: '#A86B3C' },
+      secondary: { name: '크림 옐로', hex: '#F4D9A0' },
+      directions: ['밀 이삭이 모인 다발', '빵의 둥근 단면', '오븐 온기의 결', '반죽이 부풀어오르는 곡선'],
+      avoidMotif: '차가운 금속 느낌, 기계적 형태',
+      avoidStyle: '날카로운 직선, 차가운 색',
+    },
+    {
+      key: 'academy', match: /학원|교습|과외|튜터|입시|보습|어학원|공부방|인강|온라인\s*강의|이러닝/,
+      industry: '일반 교습학원업',
+      audience: '초·중등 학생(8~16세)과 30~40대 학부모',
+      motif: '책, 연필, 등불, 디딤돌',
+      mood: '신뢰, 차분, 성실, 집중',
+      style: '단정, 명료, 절제',
+      primary: { name: '딥 인디고', hex: '#2A3D7C' },
+      secondary: { name: '따뜻한 골드', hex: '#D8A640' },
+      directions: ['책이 펼쳐진 형태', '등불이 밝혀지는 모습', '디딤돌이 쌓이는 구성', '연필 끝의 단순화'],
+      avoidMotif: '산만한 요소, 과한 장식',
+      avoidStyle: '화려한 그라데이션, 캐주얼한 손글씨',
+    },
+    {
+      key: 'studio', match: /디자인\s*스튜디오|에이전시|크리에이티브|브랜딩\s*회사/,
+      industry: '전문 디자인업(스튜디오)',
+      audience: '브랜드를 만들려는 30~40대 대표·마케터',
+      motif: '추상 도형, 교차하는 선, 빛의 프리즘',
+      mood: '모던, 세련, 실험적, 명료',
+      style: '미니멀, 기하학, 절제',
+      primary: { name: '잉크 블랙', hex: '#111212' },
+      secondary: { name: '일렉트릭 코럴', hex: '#FF5A3C' },
+      directions: ['두 형태가 교차하는 구성', '프리즘으로 분광되는 빛', '여백을 가르는 단일 획', '기하 도형의 겹침'],
+      avoidMotif: '흔한 클립아트, 상투적 상징',
+      avoidStyle: '과한 입체효과, 그림자 남발',
+    },
+    {
+      key: 'clinic', match: /병원|의원|클리닉|치과|한의원|약국|의료/,
+      industry: '의원 운영업',
+      audience: '인근 거주 전 연령(주 이용층 30~60대)',
+      motif: '십자, 맥박선, 보호의 손, 잎',
+      mood: '청결, 신뢰, 안정, 전문성',
+      style: '단순, 명료, 균형',
+      primary: { name: '메디컬 블루', hex: '#1C7FB8' },
+      secondary: { name: '민트 그린', hex: '#4FC2A0' },
+      directions: ['부드러운 십자 형태', '맥박선의 리듬', '감싸는 손의 곡선', '잎이 더해진 케어 상징'],
+      avoidMotif: '자극적·공포 유발 요소',
+      avoidStyle: '차갑고 기계적인 인상',
+    },
+    {
+      key: 'fitness', match: /헬스장|피트니스|짐|p\.?t|요가|필라테스|운동\s*센터|크로스핏|복싱|주짓수|클라이밍|태권도/,
+      industry: '체력단련시설 운영업',
+      audience: '체형·건강을 관리하는 20~40대',
+      motif: '근육의 곡선, 상승 곡선, 불꽃, 역동선',
+      mood: '역동적, 강인, 에너지, 동기부여',
+      style: '굵은 솔리드, 각진 다이내믹, 강렬',
+      primary: { name: '차콜 블랙', hex: '#1A1C1E' },
+      secondary: { name: '에너지 라임', hex: '#C6F032' },
+      directions: ['솟구치는 역동선', '근육의 강한 곡선', '전진하는 화살 형태', '불꽃의 추진감'],
+      avoidMotif: '연약하거나 정적인 형태',
+      avoidStyle: '가는 선, 파스텔 톤',
+    },
+    {
+      key: 'restaurant', match: /음식점|식당|레스토랑|맛집|요리|주점|술집|이자카야|치킨|버거|햄버거|피자|분식|떡볶이|국밥|한식|중식|일식|양식|파스타|스시|초밥|족발|보쌈|샌드위치|토스트|곱창|고깃집|구이/,
+      industry: '음식점업',
+      audience: '20~50대 지역 손님과 가족 단위',
+      motif: '포크와 나이프, 그릇, 불꽃, 식재료',
+      mood: '먹음직, 따뜻함, 활기, 정성',
+      style: '단단한 형태, 친근, 또렷',
+      primary: { name: '딥 와인레드', hex: '#8E2B34' },
+      secondary: { name: '머스타드', hex: '#E0A526' },
+      directions: ['그릇과 김의 구성', '포크·나이프의 교차', '불꽃의 따뜻한 곡선', '식재료의 단순화'],
+      avoidMotif: '비위생적·차가운 인상',
+      avoidStyle: '창백한 색, 과한 미니멀',
+    },
+    {
+      key: 'beauty', match: /미용실|헤어|뷰티|네일|손톱|살롱|에스테틱|피부\s*관리|메이크업|속눈썹|반영구|왁싱/,
+      industry: '미용업',
+      audience: '스타일을 가꾸는 20~40대',
+      motif: '머릿결, 곡선, 거울, 꽃잎',
+      mood: '세련, 우아, 부드러움, 감각적',
+      style: '유려한 곡선, 미니멀, 고급',
+      primary: { name: '로즈 토프', hex: '#B07A6E' },
+      secondary: { name: '샴페인 골드', hex: '#D8BE8A' },
+      directions: ['흐르는 머릿결의 곡선', '거울에 비친 대칭', '꽃잎이 펼쳐지는 형태', '한 획의 우아한 흐름'],
+      avoidMotif: '투박하거나 거친 형태',
+      avoidStyle: '각진 직선, 강한 원색',
+    },
+    {
+      key: 'pet', match: /펫|반려|애견|강아지|고양이|동물병원|펫샵|애완/,
+      industry: '애완용품 및 관련 서비스업',
+      audience: '반려동물과 함께하는 20~40대 보호자',
+      motif: '발자국, 둥근 귀, 하트, 꼬리',
+      mood: '다정함, 포근함, 사랑, 신뢰',
+      style: '둥근 형태, 친근, 부드러움',
+      primary: { name: '따뜻한 테라코타', hex: '#D98B5F' },
+      secondary: { name: '소프트 그린', hex: '#8FC499' },
+      directions: ['발자국의 단순화', '둥근 귀와 얼굴 실루엣', '하트가 담긴 발바닥', '꼬리의 부드러운 곡선'],
+      avoidMotif: '사실적이고 복잡한 동물 묘사',
+      avoidStyle: '차가운 색, 날카로운 선',
+    },
+    {
+      key: 'pro', match: /법률|법무|변호사|회계|세무|컨설팅|로펌|특허|노무/,
+      industry: '전문 서비스업(법률·회계·컨설팅)',
+      audience: '법률·세무 자문이 필요한 30~60대 개인·사업자',
+      motif: '기둥, 저울, 방패, 나침반',
+      mood: '신뢰, 권위, 안정, 전문성',
+      style: '견고, 균형, 절제',
+      primary: { name: '딥 네이비', hex: '#1B2A4A' },
+      secondary: { name: '브론즈 골드', hex: '#B08A4F' },
+      directions: ['균형 잡힌 저울', '견고한 기둥 구성', '방패의 보호 형태', '나침반의 방향성'],
+      avoidMotif: '가볍거나 장난스러운 요소',
+      avoidStyle: '캐주얼한 손글씨, 밝은 원색',
+    },
+    {
+      key: 'realty', match: /부동산|공인중개|중개사|분양|건설|인테리어\s*회사/,
+      industry: '부동산 중개업',
+      audience: '내 집 마련을 준비하는 30~50대',
+      motif: '지붕, 열쇠, 창문, 기둥',
+      mood: '안정, 신뢰, 견고, 따뜻함',
+      style: '단단한 기하, 명료, 균형',
+      primary: { name: '딥 그린', hex: '#1F5A3E' },
+      secondary: { name: '웜 샌드', hex: '#D9C29A' },
+      directions: ['지붕 라인의 단순화', '열쇠 형태의 추상화', '창문 격자의 구성', '안정적인 기둥 배치'],
+      avoidMotif: '불안정하거나 기울어진 형태',
+      avoidStyle: '흔들리는 선, 과한 장식',
+    },
+    {
+      key: 'flower', match: /꽃집|플라워|화훼|플로리스트|꽃다발/,
+      industry: '화훼 소매업',
+      audience: '기념일을 챙기는 20~40대',
+      motif: '꽃잎, 줄기, 잎, 피어남',
+      mood: '섬세, 우아, 생기, 다정',
+      style: '유려한 곡선, 섬세, 절제',
+      primary: { name: '더스티 로즈', hex: '#C27B82' },
+      secondary: { name: '세이지 그린', hex: '#9CB58E' },
+      directions: ['꽃잎이 펼쳐지는 형태', '한 줄기의 우아한 곡선', '잎과 꽃의 균형', '피어나는 순간의 동세'],
+      avoidMotif: '조화처럼 인위적인 형태',
+      avoidStyle: '딱딱한 직선, 차가운 색',
+    },
+    {
+      key: 'bookstore', match: /서점|북카페|책방|도서|출판/,
+      industry: '서적 소매업',
+      audience: '책과 함께 머무는 20~40대',
+      motif: '펼친 책, 책등, 등불, 잎',
+      mood: '차분, 사색, 따뜻함, 깊이',
+      style: '단정, 절제, 클래식',
+      primary: { name: '딥 포레스트', hex: '#274233' },
+      secondary: { name: '페이퍼 크림', hex: '#EAE0CC' },
+      directions: ['펼쳐진 책의 형태', '쌓인 책등의 리듬', '등불이 비추는 결', '책갈피 잎의 단순화'],
+      avoidMotif: '산만하거나 시끄러운 요소',
+      avoidStyle: '형광 색, 과한 장식',
+    },
+  ];
+
+  /* short qualitative descriptors so generic/unknown inputs still produce a brief */
+  function genericProfile(){
+    return {
+      industry: '기타 서비스업',
+      audience: '지역 고객·일반 소비자',
+      motif: '단순 도형, 머리글자, 상징적 형태',
+      mood: '신뢰, 친근, 깔끔',
+      style: '단순, 명료, 절제',
+      primary: { name: '딥 네이비블루', hex: '#003894' },
+      secondary: { name: '밝은 시안', hex: '#00ABEB' },
+      directions: ['머리글자의 기하적 구성', '핵심 상징의 단순화', '균형 잡힌 단일 도형', '여백을 살린 형태'],
+      avoidMotif: '흔한 클립아트, 상투적 상징',
+      avoidStyle: '과한 그라데이션, 복잡한 디테일',
+    };
+  }
+
+  /* ---------- formal industry classification (KSIC-style label) ----------
+     Reads what the customer does / wants to do and returns a standard-classification
+     style label like "미용업(네일아트)" / "비알코올음료점업(카페)" / "기타 음식점업(치킨전문점)".
+     Ordered specific→general; first match wins. Returns null if nothing fits. */
+  function classifyIndustry(t){
+    const online = /(온라인|쇼핑몰|스마트\s*스토어|스토어|네이버\s*스토어|쿠팡|이커머스|전자\s*상거래|인터넷\s*판매|온라인\s*판매|온라인\s*으로\s*판매|택배|배송)/.test(t);
+
+    /* 미용 */
+    if (/네일|손톱|젤\s*네일/.test(t)) return '미용업(네일아트)';
+    if (/속눈썹|반영구|왁싱/.test(t)) return '미용업(속눈썹·반영구)';
+    if (/메이크업|화장\s*전문/.test(t)) return '미용업(메이크업)';
+    if (/피부\s*관리|에스테틱|스킨\s*케어/.test(t)) return '피부미용업';
+    if (/헤어|미용실|머리\s*하|펌|염색|이발|바버/.test(t)) return '미용업(헤어)';
+
+    /* 음식점 — 세부 우선 */
+    if (/치킨/.test(t)) return '기타 음식점업(치킨전문점)';
+    if (/수제\s*버거|햄버거|버거/.test(t)) return '기타 음식점업(수제버거)';
+    if (/샌드위치|토스트|테이크\s*아웃/.test(t)) return '기타 음식점업(샌드위치·테이크아웃)';
+    if (/피자/.test(t)) return '기타 음식점업(피자전문점)';
+    if (/분식|떡볶이|김밥/.test(t)) return '기타 음식점업(분식)';
+    if (/족발|보쌈/.test(t)) return '한식 음식점업(족발·보쌈)';
+    if (/국밥|백반|한정식|찌개|불고기|곰탕|비빔밥|한식|국수|칼국수/.test(t)) return '한식 음식점업';
+    if (/짜장|짬뽕|중식|중국집|마라/.test(t)) return '중식 음식점업';
+    if (/초밥|스시|돈가스|라멘|일식|우동|규동/.test(t)) return '일식 음식점업';
+    if (/서양식|파스타|스테이크|이탈리안|리조또|브런치\s*(?:카페|집|당)/.test(t)) return '서양식 음식점업';
+    if (/술집|주점|이자카야|호프|포차|와인\s*바|펍|바\b/.test(t)) return '주점업';
+
+    /* 카페·제과 */
+    if (/디저트\s*카페/.test(t)) return '비알코올음료점업(디저트 카페)';
+    if (/(디저트|마카롱|크로플|케이크|와플)/.test(t) && /(카페|커피|음료)/.test(t)) return '비알코올음료점업(디저트 카페)';
+    if (/카페|커피|음료|에스프레소|로스터|티\s*룸|스무디/.test(t)) return '비알코올음료점업(카페)';
+    if (/베이커리|빵집|제과|페이스트리|도넛|크루아상/.test(t)) return '제과점업';
+
+    /* 교육·스포츠 */
+    if (/필라테스/.test(t)) return '스포츠·레크리에이션 교육(필라테스)';
+    if (/요가/.test(t)) return '스포츠·레크리에이션 교육(요가)';
+    if (/복싱|크로스핏|주짓수|태권도|검도|무술|클라이밍|수영\s*강습/.test(t)) return '스포츠·레크리에이션 교육';
+    if (/헬스|피트니스|p\.?t\b|웨이트|운동\s*센터/.test(t)) return '체력단련시설 운영업';
+    if (online && /(강의|강좌|클래스|수업|교육|레슨)/.test(t)) return '일반 교습학원업(온라인 강의)';
+    if (/인강|이러닝|온라인\s*강의|화상\s*수업|온라인\s*클래스/.test(t)) return '일반 교습학원업(온라인 강의)';
+    if (/영어\s*학원|수학\s*학원|보습|입시|과외|학원|교습|공부방|어학원/.test(t)) return '일반 교습학원업';
+    if (/유치원|어린이집|놀이방|보육/.test(t)) return '유아 보육·교육시설 운영업';
+
+    /* 디자인·전문 서비스 */
+    if (/디자인|브랜딩|로고\s*제작|그래픽/.test(t) && /프리\s*랜서|1인|혼자|개인/.test(t)) return '전문 디자인업(프리랜서)';
+    if (/디자인|브랜딩|그래픽/.test(t) && /스튜디오|에이전시|회사|팀/.test(t)) return '전문 디자인업(스튜디오)';
+    if (/디자인\s*(?:스튜디오|에이전시|회사|사무소|외주|업)|브랜딩\s*(?:회사|에이전시|스튜디오)|그래픽\s*디자인\s*(?:업|회사)/.test(t)) return '전문 디자인업';
+    if (/사진|포토|촬영|스냅|스튜디오\s*촬영/.test(t)) return '사진 촬영업';
+    if (/세무|회계|기장|장부/.test(t)) return '세무·회계서비스업';
+    if (/법률|변호사|법무|소송/.test(t)) return '법률서비스업';
+    if (/노무사|노무\s*법인/.test(t)) return '노무서비스업';
+    if (/컨설팅|경영\s*자문|경영\s*지원/.test(t)) return '경영컨설팅업';
+    if (/부동산|중개|공인중개/.test(t)) return '부동산 중개업';
+
+    /* 이커머스·소매·도매 */
+    if (/반려|펫|애견|강아지|고양이/.test(t)) return online ? '전자상거래 소매업(반려용품)' : '애완용품 소매업';
+    if (/주방\s*용품|그릇|식기|조리\s*도구|수입\s*주방/.test(t)) return online ? '전자상거래 소매업(수입 주방용품)' : '주방용품 소매업';
+    if (/친환경|제로\s*웨이스트|비건\s*생활|에코|생활\s*용품/.test(t)) return '기타 소매업(친환경 생활용품)';
+    if (/(의류|옷|패션|쇼핑몰)/.test(t) && online) return '전자상거래 소매업(의류)';
+    if (/화장품|코스메틱/.test(t)) return online ? '전자상거래 소매업(화장품)' : '화장품 소매업';
+    if (/건축\s*자재|건자재|철물|자재\s*도매/.test(t)) return '건축자재 도매업';
+    if (/도매/.test(t)) return '도매업';
+    if (online) return '전자상거래 소매업';
+    if (/편의점|마트|소매|상점|판매점|매장\s*운영/.test(t)) return '기타 소매업';
+
+    /* 의료·기타 */
+    if (/동물\s*병원|수의/.test(t)) return '수의업';
+    if (/치과/.test(t)) return '치과의원 운영업';
+    if (/한의원|한방/.test(t)) return '한의원 운영업';
+    if (/병원|의원|클리닉|진료/.test(t)) return '의원 운영업';
+    if (/약국/.test(t)) return '의약품 소매업';
+    if (/꽃집|플라워|화훼|꽃다발/.test(t)) return '화훼 소매업';
+    if (/서점|책방|북\s*카페|도서\s*판매/.test(t)) return '서적 소매업';
+
+    return null;
+  }
+
+  function parseTranscript(text){
+    const raw = text || '';
+    const t = raw.toLowerCase().replace(/\s+/g, ' ');
+    let hits = 0;
+
+    /* 1) detect industry → seed full profile */
+    const profile = INDUSTRY_PROFILES.find(p => p.match.test(t));
+    const base = profile ? { ...profile } : genericProfile();
+    if (profile) hits += 4; // strong signal — industry recognized
+
+    const out = {
+      industry: base.industry,
+      audience: base.audience,
+      motif: base.motif,
+      mood: base.mood,
+      style: base.style,
+      primary: base.primary,
+      secondary: base.secondary,
+      directions: base.directions,
+      avoidMotif: base.avoidMotif,
+      avoidStyle: base.avoidStyle,
+    };
+
+    /* refine the industry into a formal KSIC-style label from the transcript;
+       falls back to the profile's (also formal) label when nothing specific fits */
+    const indLabel = classifyIndustry(t);
+    if (indLabel) { out.industry = indLabel; hits++; }
+
+    /* 2) brand name — ONLY when the customer explicitly NAMES the brand.
+       Accepts: "가게 이름은 X(이)에요/입니다/예요", "상호는 X", "브랜드명은 X",
+                "X(이)라고 / X(이)라는" (X 따옴표 유무 무관).
+       No loose fallback — if no clear naming construction, both fields stay empty
+       and the submit handler fills "언급되지 않음". */
+    const NAME_KW = '(?:가게\\s*)?(?:이름|상호명?|브랜드\\s*명?|회사\\s*명?|업체\\s*명?)';
+    let nameStr = null;
+    /* (a) naming keyword + quoted name */
+    let nm = raw.match(new RegExp(NAME_KW + '\\s*[은는이가]?\\s*[:]?\\s*[「『""\u2018\u2019\'"]([^」』""\u2018\u2019\'"\\n]{1,30})[」』""\u2018\u2019\'"]'));
+    if (nm) nameStr = nm[1];
+    /* (b) quoted name followed by a naming verb (…라고/라는 지었어요) */
+    if (!nameStr) {
+      nm = raw.match(/[「『""\u2018\u2019'"]([^」』""\u2018\u2019'"\n]{1,30})[」』""\u2018\u2019'"]\s*(?:이?라고|이?라는)/);
+      if (nm) nameStr = nm[1];
+    }
+    /* (c) naming keyword + unquoted name ending in a copula/naming verb */
+    if (!nameStr) {
+      nm = raw.match(new RegExp(NAME_KW + '\\s*[은는이가]?\\s*[:]?\\s*([가-힣A-Za-z][가-힣A-Za-z0-9 ]{0,18}?)\\s*(?:이에요|예요|이예요|입니다|이다|이야|이고|이라고|라고|이라는|라는)'));
+      if (nm) nameStr = nm[1];
+    }
+    if (nameStr) {
+      nameStr = nameStr.trim().replace(/\s+/g, ' ');
+      const hasKo = /[가-힣]/.test(nameStr);
+      const hasEn = /[A-Za-z]/.test(nameStr);
+      if (hasKo) { out.brandKo = nameStr; hits++; }
+      else if (hasEn) { out.brandEn = nameStr; hits++; }
+    }
+
+    /* 3) explicit keyword overrides — these refine the profile defaults */
+
+    /* audience — refine the profile default with realistic Korean age ranges
+       inferred from explicit demographic cues in the transcript (strong correlation). */
+    const ageCues = [
+      [/영유아|유아|미취학|어린\s*아이|아이들/, '만 3~5세 미취학 아동과 30~40대 학부모'],
+      [/초등학생|초등|초딩/, '초등학생(8~13세)과 30~40대 학부모'],
+      [/중학생|중등/, '중학생(14~16세)과 40대 학부모'],
+      [/고등학생|고등|수험생|입시|재수/, '고등학생·수험생(17~19세)과 학부모'],
+      [/청소년|10대|십\s*대/, '청소년(14~19세)과 학부모'],
+      [/대학생|대학교|이십\s*대\s*초반|취준|취업\s*준비/, '20대 대학생·사회초년생'],
+      [/신혼|예비\s*부부|웨딩|혼수|결혼\s*준비/, '결혼을 준비하는 28~38세'],
+      [/임산부|산모|육아|아기\s*엄마|영유아\s*부모/, '20~40대 영유아 부모'],
+      [/어르신|노인|시니어|실버|고령|노년|중장년/, '50~70대 중·장년 고객'],
+      [/남녀노소|누구나|온\s*가족|전\s*연령|모든\s*연령|가족\s*단위/, '전 연령 — 남녀노소 누구나'],
+      [/직장인|회사원|오피스|샐러리|워킹/, '20~40대 직장인'],
+    ];
+    const ageHit = ageCues.find(([re]) => re.test(t));
+    if (ageHit) { out.audience = ageHit[1]; hits++; }
+    else {
+      /* numeric decade mentions like "20대"·"30대" → natural range/single label */
+      const decadeRe = /([1-7])0\s*대/g;
+      const found = new Set(); let mm;
+      while ((mm = decadeRe.exec(t))) found.add(parseInt(mm[1], 10));
+      if (found.size) {
+        const arr = [...found].sort((a, b) => a - b);
+        const label = arr.length > 1 ? `${arr[0]}0~${arr[arr.length - 1]}0대` : `${arr[0]}0대`;
+        out.audience = `${label} 중심 고객`;
+        hits++;
+      }
+    }
+
+    /* motif — append any explicitly named motifs not already covered */
+    const motifMap = [
+      [/햇살|아침\s*햇/, '아침 햇살'], [/달빛|달밤|밤하늘/, '달빛'],
+      [/도자기|머그/, '도자기 컵'], [/책|독서/, '책'], [/로켓/, '로켓 상승'],
+      [/종이비행기/, '종이비행기'], [/화살표|우상향/, '상승 화살표'],
+      [/잎|나뭇잎|식물/, '잎·나뭇잎'], [/원두|커피콩/, '원두'],
+      [/무지개/, '무지개'], [/새싹|씨앗/, '새싹'], [/별|스타/, '별'],
+      [/하트|사랑/, '하트'], [/날개|윙/, '날개'], [/물결|파도/, '물결'],
+    ];
+    const extraMotifs = motifMap.filter(([re]) => re.test(t)).map(([,k]) => k);
+    if (extraMotifs.length) {
+      const existing = out.motif.split(',').map(s => s.trim());
+      const merged = [...new Set([...extraMotifs, ...existing])].slice(0, 5);
+      out.motif = merged.join(', ');
+      hits++;
+    }
+
+    /* mood — explicit mentions prepend */
+    const moodMap = [
+      [/고요|조용|차분/, '고요'], [/아늑|편안|포근/, '아늑함'], [/따뜻/, '따뜻함'],
+      [/모던|현대|미니멀/, '모던'], [/성장|도약/, '성장'], [/역동|에너지|다이내/, '역동적'],
+      [/전문|프로/, '전문성'], [/신뢰|믿음/, '신뢰'], [/귀엽|깜찍/, '귀여움'],
+      [/고급|럭셔리|프리미엄/, '고급'], [/밝[은게]|발랄|경쾌/, '밝음'],
+    ];
+    const extraMoods = moodMap.filter(([re]) => re.test(t)).map(([,k]) => k);
+    if (extraMoods.length) {
+      const existing = out.mood.split(',').map(s => s.trim());
+      out.mood = [...new Set([...extraMoods, ...existing])].slice(0, 5).join(', ');
+      hits++;
+    }
+
+    /* style — explicit mention replaces */
+    if (/굵|볼드|강렬|단단|두꺼/.test(t)) { out.style = '굵은 솔리드, 절제, 추상'; hits++; }
+    else if (/얇|섬세|가는/.test(t)) { out.style = '얇은 선, 섬세, 손그림'; hits++; }
+    else if (/단순|미니멀|심플/.test(t)) { out.style = '단순, 미니멀, 절제'; hits++; }
+    else if (/둥글|동글|부드럽/.test(t)) { out.style = '둥근 형태, 부드러운 곡선, 친근'; hits++; }
+
+    /* colors — explicit mention replaces profile color */
+    const colorMap = [
+      [/베이지/, { name: '따뜻한 베이지', hex: '#C4A584' }],
+      [/딥\s*네이비|남색/, { name: '딥 네이비블루', hex: '#003894' }],
+      [/검정|블랙|먹색/, { name: '딥 블랙', hex: '#111212' }],
+      [/포레스트|짙은\s*초록|딥\s*그린|진한\s*녹색/, { name: '포레스트 그린', hex: '#1F5A3E' }],
+      [/연두|라임/, { name: '라임 그린', hex: '#9BCB3C' }],
+      [/초록|녹색|그린/, { name: '내추럴 그린', hex: '#3C9A5F' }],
+      [/파랑|파란|블루/, { name: '청량한 블루', hex: '#1A6FD8' }],
+      [/빨강|빨간|레드/, { name: '비비드 레드', hex: '#D8392B' }],
+      [/주황|오렌지|코랄/, { name: '따뜻한 코랄', hex: '#FF8A5B' }],
+      [/노랑|노란|옐로/, { name: '선샤인 옐로', hex: '#F5C518' }],
+      [/분홍|핑크/, { name: '소프트 핑크', hex: '#E78AA8' }],
+      [/보라|퍼플|바이올렛/, { name: '딥 퍼플', hex: '#6B4E9E' }],
+      [/갈색|브라운|밤색/, { name: '구움색 브라운', hex: '#A86B3C' }],
+    ];
+    const colorHit = colorMap.find(([re]) => re.test(t));
+    if (colorHit) { out.primary = colorHit[1]; hits++; }
+
+    if (/시안|밝은\s*파랑|스카이/.test(t)) out.secondary = { name: '밝은 시안', hex: '#00ABEB' };
+    else if (/흐릿|회색|그레이/.test(t))     out.secondary = { name: '연한 회색', hex: '#A8A8A8' };
+    else if (/아이보리|크림/.test(t))         out.secondary = { name: '아이보리', hex: '#F2EBDA' };
+
+    /* derive directions live from the (possibly overridden) primary motifs when
+       the user explicitly steered the motif, so 표현 방향 stays consistent */
+    if (extraMotifs.length) {
+      out.directions = out.motif.split(',').slice(0, 4).map(m => `${m.trim()}의 단순화된 동세`);
+    }
+
+    /* 4) avoid — explicit phrase after 피해/싫/빼 overrides profile default */
+    const avoidMatch = raw.match(/(?:피[해하][고려]?\s*[싶주]?[은어]?\s*|싫[고은이라]\s*|빼[고주]?\s*)([^.\n!?]{3,60})(?=[.\n!?]|$)/);
+    if (avoidMatch) {
+      const ph = avoidMatch[1].trim().replace(/^[^가-힣A-Za-z]+/, '');
+      if (ph.length > 2) { out.avoidMotif = ph; hits++; }
+    }
+
+    /* [누적 근거] FIELD:4·9 ← FIELD:1 — derive a motif (with meaning) from the brand
+       name itself, and rewrite 표현 방향 to reference it. e.g. 반디 → 반딧불이 — 스스로 빛나… */
+    const NAME_MEANINGS = [
+      [/반디|반딧/, '반딧불이 — 스스로 빛나 길을 밝힘'],
+      [/달구름/, '달빛 구름 — 고요하고 포근한 흐름'],
+      [/달\b|문\b|루나|문라이트/, '달빛 — 은은하게 비추는 따뜻함'],
+      [/별|스타|스텔라/, '별 — 길잡이가 되는 빛'],
+      [/햇살|햇|해님|선샤인/, '햇살 — 밝게 퍼지는 온기'],
+      [/빛|라이트|루미/, '빛 — 환하게 길을 밝힘'],
+      [/숲|포레|포레스트/, '숲 — 자라나는 생명력'],
+      [/새싹|씨앗|싹|스프라우트/, '새싹 — 움트는 성장'],
+      [/나무|트리/, '나무 — 단단히 뿌리내린 성장'],
+      [/꽃|플라워|블룸/, '꽃 — 피어나는 아름다움'],
+      [/바다|해양|마린|오션/, '바다 — 넓고 깊은 포용'],
+      [/하늘|스카이/, '하늘 — 트인 가능성'],
+      [/구름|클라우드/, '구름 — 부드럽고 자유로운 흐름'],
+      [/길\b|로드|패스/, '길 — 나아갈 방향을 제시'],
+      [/물\b|워터|아쿠아/, '물 — 맑고 깨끗한 흐름'],
+      [/돌|바위|스톤|락\b/, '단단한 돌 — 견고한 신뢰'],
+      [/연필|펜\b/, '연필 — 배우고 기록하는 힘'],
+      [/책|북\b|page|페이지/, '책 — 쌓이는 지식'],
+      [/날개|윙\b/, '날개 — 비상과 도약'],
+      [/하트|러브/, '하트 — 따뜻한 마음'],
+      [/곰|베어/, '곰 — 듬직하고 다정함'],
+      [/토끼|래빗/, '토끼 — 친근하고 빠른'],
+    ];
+    const nameMeaning = NAME_MEANINGS.find(([re]) => re.test(out.brandKo || ''));
+    if (nameMeaning) {
+      const existing = out.motif.split(',').map(s => s.trim()).filter(Boolean);
+      out.motif = [nameMeaning[1], ...existing].slice(0, 4).join(', ');
+      const nameWord = nameMeaning[1].split('—')[0].trim();
+      const styleWord = (out.style || '').split(',')[0].trim() || '절제된';
+      out.directions = [
+        `${nameWord}의 형태를 단순화한 심볼`,
+        `${nameWord}에서 뻗어나오는 동세`,
+        `한 점으로 모이는 ${styleWord} 구성`,
+        `작은 빛 한 점으로 포인트`,
+      ];
+      hits++;
+    }
+
+    const accuracy = hits >= 8 ? 'high' : hits >= 5 ? 'med' : 'low';
+    return { ...out, _profile: base.key || 'generic', _hits: hits, _accuracy: accuracy };
+  }
+
+  /* ---------- Korean → impactful English brand name ----------
+     Not a translation — strip the business-type suffix and romanize the core
+     identity word. e.g. 반디영어학원 → Bandi, 달구름 카페 → Dalgureum, 강철짐 → Gangcheol */
+  function romanizeKorean(text){
+    const CHO  = ['g','kk','n','d','tt','r','m','b','pp','s','ss','','j','jj','ch','k','t','p','h'];
+    const JUNG = ['a','ae','ya','yae','eo','e','yeo','ye','o','wa','wae','oe','yo','u','wo','we','wi','yu','eu','ui','i'];
+    const JONG = ['','k','k','k','n','n','n','t','l','k','m','l','l','l','p','l','m','p','p','t','t','ng','t','t','k','t','p','t'];
+    let out = '';
+    for (const ch of text){
+      const code = ch.charCodeAt(0);
+      if (code >= 0xAC00 && code <= 0xD7A3){
+        const s = code - 0xAC00;
+        out += CHO[Math.floor(s/588)] + JUNG[Math.floor((s%588)/28)] + JONG[s%28];
+      } else if (/[A-Za-z0-9]/.test(ch)){
+        out += ch;
+      } else if (ch === ' '){
+        out += ' ';
+      }
+    }
+    return out.replace(/\s+/g, ' ').trim();
+  }
+
+  const BRAND_TYPE_SUFFIXES = [
+    '영어학원','수학학원','보습학원','어학원','학원','유치원','어린이집','놀이방','교습소',
+    '커피전문점','로스터리','카페','커피','베이커리','제과점','빵집','디저트',
+    '헬스장','휘트니스','피트니스','요가원','필라테스','짐',
+    '디자인스튜디오','스튜디오','에이전시','크리에이티브',
+    '동물병원','한의원','치과의원','정형외과','피부과','내과','치과','의원','병원','클리닉','약국',
+    '미용실','헤어샵','헤어','살롱','네일샵','네일','에스테틱',
+    '펫샵','법무법인','법률사무소','회계법인','세무사무소','세무사','컨설팅',
+    '공인중개사','중개사무소','부동산',
+    '플라워샵','플라워','꽃집','북카페','서점','책방','도서관',
+    '레스토랑','음식점','식당','주점','이자카야',
+    '스토어','마켓','하우스','컴퍼니','컴퍼니','샵','샾','점',
+  ].sort((a,b) => b.length - a.length); // longest-first so 영어학원 beats 학원
+
+  function deriveEnglishName(brandKo){
+    if (!brandKo) return '';
+    const name = brandKo.trim();
+    if (/^[A-Za-z0-9 ]+$/.test(name)) return name; // already English
+    let core = name;
+    for (const ty of BRAND_TYPE_SUFFIXES){
+      if (core.endsWith(ty) && core.length > ty.length){
+        core = core.slice(0, core.length - ty.length).trim();
+        break;
+      }
+    }
+    if (!core) core = name;
+    core = core.split(/\s+/)[0]; // identity word = first token
+    const roman = romanizeKorean(core);
+    if (!roman) return '';
+    return roman.charAt(0).toUpperCase() + roman.slice(1).toLowerCase();
+  }
+
+  /* ---------- completeness-based accuracy ----------
+     '높음' only when every required brief field holds a valid, complete value;
+     drops to '중간' the moment any field is empty, still being composed
+     (incomplete Hangul jamo), an incomplete hex, or the "언급되지 않음" placeholder. */
+  const ACC_NONE = '언급되지 않음';
+  const hasIncompleteJamo = (s) => /[\u3130-\u318F\u1100-\u11FF\uA960-\uA97F\uD7B0-\uD7FF]/.test(s || '');
+  const isFieldComplete = (s) => {
+    const v = (s || '').trim();
+    if (!v || v === ACC_NONE) return false;
+    if (hasIncompleteJamo(v)) return false;
+    return true;
+  };
+  function assessBriefAccuracy(f){
+    const core = [f.brandKo, f.brandEn, f.industry, f.audience, f.motif, f.mood, f.style];
+    let ok = core.every(isFieldComplete);
+    const colorOk = (c) => c && isFieldComplete(c.name) && /^#[0-9A-Fa-f]{6}$/.test((c.hex || '').trim());
+    ok = ok && colorOk(f.primary) && colorOk(f.secondary);
+    const dirs = f.directions || [];
+    const anyDir = dirs.some(isFieldComplete);
+    const dirJamoBad = dirs.some(d => d && hasIncompleteJamo(d));
+    ok = ok && anyDir && !dirJamoBad;
+    /* count how much is present to distinguish 중간 vs 낮음 */
+    if (ok) return 'high';
+    const present = core.filter(isFieldComplete).length;
+    return present <= 2 ? 'low' : 'med';
+  }
+
+  /* short concept summary for step 3 meta line */
+  function deriveConcept({ motif, mood, style, primary, secondary }){
+    const parts = [];
+    if (mood)  parts.push(`${mood.split(',')[0].trim()} 분위기의`);
+    if (motif) parts.push(`${motif.split(',')[0].trim()} 동세를`);
+    if (style) parts.push(`${style.split(',')[0].trim()} 심볼로 표현`);
+    else       parts.push('절제된 추상 심볼로 표현');
+    const colorPart = (primary && secondary && primary.name && secondary.name)
+      ? ` — ${primary.name}→${secondary.name} 투톤`
+      : (primary && primary.name ? ` — ${primary.name} 단색` : '');
+    return parts.join(' ') + colorPart;
+  }
+
+  /* shared symbol polygon seed (kept in main scope so App can init synchronously,
+     identical to step4editor's INITIAL_PATHS) */
+  const SYMBOL_INITIAL_PATHS = {
+    A: [{x:60,y:14},{x:74,y:30},{x:78,y:50},{x:74,y:72},{x:78,y:90},{x:60,y:82},{x:42,y:90},{x:46,y:72},{x:42,y:50},{x:46,y:30}],
+    B: [{x:96,y:22},{x:88,y:44},{x:74,y:60},{x:58,y:76},{x:36,y:92},{x:22,y:96},{x:30,y:76},{x:42,y:60},{x:58,y:44},{x:74,y:30}],
+    C: [{x:98,y:22},{x:98,y:46},{x:82,y:46},{x:82,y:62},{x:60,y:62},{x:60,y:80},{x:34,y:80},{x:34,y:62},{x:76,y:22}],
+    D: [{x:60,y:12},{x:78,y:34},{x:90,y:56},{x:88,y:78},{x:74,y:92},{x:60,y:98},{x:46,y:92},{x:32,y:78},{x:30,y:56},{x:42,y:34}],
+  };
+  if (!window.SYMBOL_INITIAL_PATHS) window.SYMBOL_INITIAL_PATHS = SYMBOL_INITIAL_PATHS;
+
+  /* ---------- main app ---------- */
+  function App(){
+    const [current, setCurrent] = useState(1);
+    const [transcript, setTranscript] = useState('');
+    const [picked, setPicked] = useState([]); // lifted: shared with step 4; starts unselected
+    const [genSvgs, setGenSvgs] = useState({}); // step-3 generated symbols (persist across nav)
+    const [design, setDesign] = useState(null); // step-4 design settings, surfaced to step 5
+    const [step1Brand, setStep1Brand] = useState(() => {
+      const stored = localStorage.getItem('step1Brand');
+      return stored !== null ? stored : '';
+    }); // optional brand name typed on step 1
+    const [briefFilled, setBriefFilled] = useState(false); // step-2 auto-fill ran at least once
+    useEffect(() => { localStorage.setItem('step1Brand', step1Brand); }, [step1Brand]);
+    const [showEditor, setShowEditor] = useState(false); // step-5 심볼 다듬기 편집기 표시 여부
+    const [editSymbolId, setEditSymbolId] = useState(null); // which 시안 the editor opens on
+    /* symbol edit state lifted to App so the editor (now on step 5) shares it with previews/mockups */
+    const [symbolPaths, setSymbolPaths] = useState(() => JSON.parse(JSON.stringify(SYMBOL_INITIAL_PATHS)));
+    const [symbolCurve, setSymbolCurve] = useState(true);
+
+    const [brandKo, setBrandKo] = useState('부트캠프');
+    const [brandEn, setBrandEn] = useState('Camp');
+    const [industry, setIndustry] = useState('IT 개발자 양성·커리어 전환 부트캠프 교육 서비스');
+    const [audience, setAudience] = useState('20-30대 커리어 전환 준비생, 취업·이직을 준비하는 비전공자~');
+    const [motif, setMotif] = useState('캠프파이어의 열기, 수직 상승, 수렴의 구조, 집중력, 역량상승');
+    const [mood, setMood] = useState('성장, 도약, 역동적, 전문성, 신뢰');
+    const [style, setStyleStr] = useState('굵은 솔리드, 단순, 절제, 추상');
+    const [primary, setPrimary] = useState({ name: '딥 네이비블루', hex: '#003894' });
+    const [secondary, setSecondary] = useState({ name: '밝은 시안', hex: '#00ABEB' });
+    const [directions, setDirections] = useState([
+      '캠프파이어처럼 모여드는 열기 — 집중과 수렴의 에너지',
+      '불꽃들이 정점으로 수렴되는 역삼각형 구조',
+      '크기가 다른 3~5개 면이 위로 갈수록 좁아지는 배치',
+      '수직 축 중심 대칭 — 아래 넓고 위 날카로운 안정된 구도',
+    ]);
+    const [avoidMotif, setAvoidMotif] = useState('유치한 클립아트 일러스트, 캐릭터/마스코트');
+    const [avoidColor, setAvoidColor] = useState('');
+    const [avoidStyle, setAvoidStyle] = useState('가는 선, 복잡한 잔디테일, 웹 아이콘 등은 시각 배제');
+    const [avoidRef, setAvoidRef] = useState('');
+
+    /* applied when user advances from step 1 — parses transcript into all step 2 fields */
+    /* blank 전체 필드 (brand·industry 포함) */
+    const [briefLoading, setBriefLoading] = useState(false);
+    const blankBrief = () => {
+      setBrandKo(''); setBrandEn(''); setIndustry('');
+      setAudience(''); setMotif(''); setMood(''); setStyleStr('');
+      setPrimary({ name: '', hex: '' }); setSecondary({ name: '', hex: '' });
+      setDirections(['']); setAvoidMotif(''); setAvoidColor(''); setAvoidStyle('');
+    };
+
+    /* fill 전체 필드: instant deterministic, then deep Claude refinement */
+    const fillBriefFrom = (parsed) => {
+      const NONE = '언급되지 않음';
+      if (parsed.brandKo) setBrandKo(parsed.brandKo);
+      if (parsed.brandEn) setBrandEn(parsed.brandEn);
+      else if (parsed.brandKo) setBrandEn(deriveEnglishName(parsed.brandKo) || NONE);
+      if (parsed.industry) setIndustry(parsed.industry);
+      if (parsed.audience)   setAudience(parsed.audience);
+      if (parsed.motif)      setMotif(parsed.motif);
+      if (parsed.mood)       setMood(parsed.mood);
+      if (parsed.style)      setStyleStr(parsed.style);
+      if (parsed.primary)    setPrimary(parsed.primary);
+      if (parsed.secondary)  setSecondary(parsed.secondary);
+      if (parsed.directions && parsed.directions.length) setDirections(parsed.directions);
+      if (parsed.avoidMotif) setAvoidMotif(parsed.avoidMotif);
+      if (parsed.avoidStyle) setAvoidStyle(parsed.avoidStyle);
+      if (window.claude && typeof window.claude.complete === 'function') {
+        const prompt = [
+          '너는 브랜드 디자인 브리프 작성 전문가야. 아래 고객 상담 내용을 심층 분석해서 JSON으로만 답해.',
+          '상담 내용: """' + (transcript || '').slice(0, 4000) + '"""',
+          '누적 근거 원칙: 각 항목은 상담내용 + 앞 항목들을 근거로 인과·상관관계 있게 일관되게 작성.',
+          '- brandKo: 상담 내용에서 파악한 한글 브랜드명. 언급 없으면 "언급되지 않음".',
+          '- industry: 고객 상담 내용과 브랜드명을 분석해 업종을 정확하고 간결하게 도출. 우선순위: (1) 상담에 업종 명시 → 그대로, (2) 상담에서 유추 가능 → 맥락 판단, (3) 브랜드명에서만 유추 가능 → 브랜드명 의미 분석, (4) 모두 불명확 → 가장 일반적인 상위 업종. 형식: "[대상/타깃] [핵심 서비스/상품] 전문 [업태]" (예: "초·중등 수학 전문 학원", "20-30대 여성 전문 필라테스 스튜디오", "중소기업 전문 세무 컨설팅"). 대상/타깃이 불분명하면 생략하고 핵심 서비스/업태만. 업종명만 한 줄로 출력.',
+          '- audience: 이 브랜드에 올 고객 페르소나 20명을 떠올린 뒤, 그들을 대표하는 "현실적 나잇대 + 가장 보편적인 한두 단어"로 아주 간결히 (예: "20~30대 동네 단골").',
+          '- motif: 다음 세 가지 요소를 포함해 쉼표로 구분된 4~5개 항목으로 작성. (1) 브랜드명의 상징적 의미 또는 어원적 연상, (2) 브랜드가 지향하는 철학적 형태나 구조적 이미지, (3) 대상 고객에게 전달하고자 하는 핵심 가치나 역량. 각 항목은 명사 또는 "~함" 형태로 끝낼 것. 동사·구어체 종결 절대 금지.',
+          '- mood: 위 모두를 가장 잘 표현하는 분위기 단어 4~6개(쉼표).',
+          '- style: 가장 잘 표현하는 스타일 단어 3~5개(쉼표).',
+          '- primary/secondary: 가장 잘 표현하는 색 이름과 #hex.',
+          '- directions: 다음 4개를 각각 짧은 한 문구로 작성 (4개 배열). (1) 브랜드명에서 연상되는 자연물·생명체와 그것이 상징하는 교육적 속성의 결합 표현, (2) 그 상징 요소들이 모이거나 수렴되는 구조적 형태 묘사, (3) 심볼을 구성하는 조형 요소의 크기 및 수량 특성, (4) 심볼의 기하학적 균형 방식(대칭 여부 및 안정감 표현 방식).',
+          '- avoid*: 대상고객/사장님이 싫어하거나 혐오하거나, 브랜드를 잘 못 살리는 요소.',
+          'JSON 형식만: {"brandKo":"","industry":"","audience":"","motif":"","mood":"","style":"","primaryName":"","primaryHex":"#000000","secondaryName":"","secondaryHex":"#000000","directions":["","","",""],"avoidMotif":"","avoidColor":"","avoidStyle":""}',
+          'JSON만 출력. 설명/코드펜스 금지.',
+        ].join('\n');
+        (async () => {
+          try {
+            const out = await Promise.race([
+              window.claude.complete(prompt),
+              new Promise((_, rej) => setTimeout(() => rej(0), 22000)),
+            ]);
+            const mm = String(out).match(/\{[\s\S]*\}/);
+            if (!mm) return;
+            const j = JSON.parse(mm[0]);
+            const hex = (v) => /^#[0-9A-Fa-f]{6}$/.test(v || '');
+            if (j.brandKo) { setBrandKo(j.brandKo); setBrandEn(deriveEnglishName(j.brandKo) || j.brandKo); }
+            if (j.industry) setIndustry(j.industry);
+            if (j.audience) setAudience(j.audience);
+            if (j.motif) setMotif(j.motif);
+            if (j.mood) setMood(j.mood);
+            if (j.style) setStyleStr(j.style);
+            if (j.primaryName && hex(j.primaryHex)) setPrimary({ name: j.primaryName, hex: j.primaryHex.toUpperCase() });
+            if (j.secondaryName && hex(j.secondaryHex)) setSecondary({ name: j.secondaryName, hex: j.secondaryHex.toUpperCase() });
+            if (Array.isArray(j.directions) && j.directions.length) setDirections(j.directions.filter(Boolean).slice(0, 6));
+            if (j.avoidMotif) setAvoidMotif(j.avoidMotif);
+            if (j.avoidColor) setAvoidColor(j.avoidColor);
+            if (j.avoidStyle) setAvoidStyle(j.avoidStyle);
+          } catch (e) { /* keep deterministic fill */ }
+          finally { setBriefLoading(false); }
+        })();
+      } else {
+        setBriefLoading(false);
+      }
+    };
+
+    /* sequence: blank → 1s → fill (used on first arrival AND on 다시 생성) */
+    const runBriefSequence = (parsed) => {
+      setBriefLoading(true);
+      blankBrief();
+      setTimeout(() => fillBriefFrom(parsed), 1000);
+    };
+
+    const submitFromStep1 = () => {
+      /* if step 2 was already filled once, just navigate back — DON'T regenerate
+         (mere navigation between steps must not change content; use 다시 생성 to refill) */
+      if (briefFilled) { setCurrent(2); return; }
+      const parsed = parseTranscript(transcript);
+      const NONE = '언급되지 않음';
+      /* brand·업종 only — from the transcript; preserved across 다시 생성 */
+      setBrandKo(parsed.brandKo || NONE);
+      if (parsed.brandEn) setBrandEn(parsed.brandEn);
+      else if (parsed.brandKo) setBrandEn(deriveEnglishName(parsed.brandKo) || NONE);
+      else setBrandEn(NONE);
+      if (parsed.industry) setIndustry(parsed.industry);
+      setCurrent(2);
+      setBriefFilled(true);
+      runBriefSequence(parsed); // 대상고객~피해야할것: blank, then auto-fill after 1s
+    };
+
+    const regenBrief = () => { setBriefFilled(true); runBriefSequence(parseTranscript(transcript)); };
+
+    const motifChips = useMemo(() => splitCsv(motif), [motif]);
+    const moodChips  = useMemo(() => splitCsv(mood),  [mood]);
+
+    /* Accuracy = form completeness, but recomputed ONLY when the user leaves a field
+       (blur), not during typing. assessNow() reads the latest field values. */
+    const assessNow = () => assessBriefAccuracy({ brandKo, brandEn, industry, audience, motif, mood, style, primary, secondary, directions });
+    const [accuracy, setAccuracy] = useState('high');
+    /* refresh once when arriving at step 2 (e.g. after step-1 submit) */
+    useEffect(() => {
+      if (current === 2) setAccuracy(assessNow());
+      // eslint-disable-next-line
+    }, [current]);
+
+    /* after the auto-fill loading overlay ends, run accuracy monitoring once */
+    useEffect(() => {
+      if (!briefLoading) setAccuracy(assessNow());
+      // eslint-disable-next-line
+    }, [briefLoading]);
+
+    /* Manual edit of 한글 브랜드명 → regenerate 영문 by the same rule as step 1.
+       Bound ONLY to this field's onChange (fires solely on user keystrokes in
+       this input) — no global watcher, no polling, no network. */
+    const handleBrandKoEdit = (val) => {
+      setBrandKo(val);
+      const trimmed = val.trim();
+      if (!trimmed || trimmed === '언급되지 않음') { setBrandEn(trimmed ? '언급되지 않음' : ''); return; }
+      setBrandEn(deriveEnglishName(trimmed) || '언급되지 않음');
+    };
+
+    if (current === 1) {
+      return (
+        <Step1View
+          value={transcript}
+          onChange={setTranscript}
+          brandName={step1Brand}
+          onBrandName={setStep1Brand}
+          onNext={submitFromStep1}
+        />
+      );
+    }
+
+    if (current === 3) {
+      return (
+        <Step3View
+          onBack={()=>setCurrent(2)}
+          onNext={()=>setCurrent(4)}
+          onSelectStep={setCurrent}
+          picked={picked}
+          setPicked={setPicked}
+          genSvgs={genSvgs}
+          setGenSvgs={setGenSvgs}
+          concept={deriveConcept({ motif, mood, style, primary, secondary })}
+          primary={primary}
+          secondary={secondary}
+          motif={motif}
+          directions={directions}
+        />
+      );
+    }
+
+    if (current === 4) {
+      return (
+        <Step4Mount
+          onBack={()=>setCurrent(3)}
+          onNext={()=>setCurrent(5)}
+          onSelectStep={setCurrent}
+          picked={picked}
+          brandKo={brandKo}
+          brandEn={brandEn}
+          primary={primary}
+          onDesign={setDesign}
+          symbolPaths={symbolPaths}
+          setSymbolPaths={setSymbolPaths}
+          symbolCurve={symbolCurve}
+          setSymbolCurve={setSymbolCurve}
+        />
+      );
+    }
+
+    if (current === 5) {
+      const Sec = window.MockupSection;
+      /* 심볼 다듬기 = a separate page; shown only when the proposal's button is pressed */
+      if (showEditor) {
+        return (
+          <div style={shell.page}>
+            <div style={shell.frame}>
+              <StepRail current={5} onSelect={(n)=>{ setShowEditor(false); setCurrent(n); }} />
+              <main style={shell.content}>
+                <div style={shell.scroll}>
+                  <header style={{ marginBottom: 18, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                    <div>
+                      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>심볼 다듬기</h1>
+                      <p style={{ margin: '8px 0 0', color: '#6b6f6e', fontSize: 13.5, lineHeight: 1.6 }}>
+                        제안서에 담을 시안의 심볼 형태를 다듬습니다. 다 되면 「제안서로 돌아가기」를 누르세요.
+                      </p>
+                    </div>
+                    <button type="button" style={footerStyle.ghost} onClick={()=>setShowEditor(false)}>← 제안서로 돌아가기</button>
+                  </header>
+                  {window.SymbolEditor && design && picked && picked.length ? (
+                    <window.SymbolEditor
+                      picked={picked}
+                      initialId={editSymbolId}
+                      color={design.symbolColor || design.color}
+                      fillMode={design.fillMode}
+                      pathsState={symbolPaths}
+                      setPathsState={setSymbolPaths}
+                      curveState={symbolCurve}
+                      setCurveState={setSymbolCurve}
+                      onClose={()=>{ setShowEditor(false); const sc = document.querySelector('main > div'); if (sc) sc.scrollTop = 0; }}
+                    />
+                  ) : null}
+                  <div style={{ height: 24 }} />
+                </div>
+                <footer style={footerStyle.bar}>
+                  <button type="button" style={footerStyle.ghost} onClick={()=>setShowEditor(false)}>← 제안서로 돌아가기</button>
+                  <button type="button" style={footerStyle.primary} onClick={()=>setShowEditor(false)}>
+                    <span aria-hidden style={{ marginRight: 6 }}>✓</span>적용 완료
+                  </button>
+                </footer>
+              </main>
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div style={shell.page}>
+          <div style={shell.frame}>
+            <StepRail current={5} onSelect={setCurrent} />
+            <main style={shell.content}>
+              <div style={shell.scroll}>
+                <header style={{ marginBottom: 18 }}>
+                  <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>
+                    5단계 — 제안서 보내기
+                  </h1>
+                  <p style={{ margin: '8px 0 0', color: '#6b6f6e', fontSize: 13.5, lineHeight: 1.6 }}>
+                    완성한 로고를 목업 템플릿에 적용해 실제 사용 모습을 만들고, 제안서에 담아 고객에게 보냅니다.
+                  </p>
+                </header>
+                {(() => {
+                  if (!Sec) return null;
+                  if (!design || !picked || !picked.length) {
+                    return (
+                      <div style={{ padding: '40px 16px', background: '#fafaf8', border: '1px dashed #d3d6d2', borderRadius: 12, textAlign: 'center', color: '#7a7e79', fontSize: 13 }}>
+                        먼저 3단계에서 시안을 담고, 4단계에서 글꼴·심볼을 설정해 주세요.
+                      </div>
+                    );
+                  }
+                  return (
+                    <React.Fragment>
+                      {window.ProposalSection && (
+                        <window.ProposalSection
+                          picked={picked}
+                          {...design}
+                          symbolPaths={symbolPaths}
+                          symbolCurve={symbolCurve}
+                          onEditSymbol={(id)=>{ setEditSymbolId(id || null); setShowEditor(true); }}
+                        />
+                      )}
+                      <Sec picked={picked} {...design} symbolPaths={symbolPaths} symbolCurve={symbolCurve} />
+                    </React.Fragment>
+                  );
+                })()}
+                <div style={{ height: 24 }} />
+              </div>
+              <footer style={footerStyle.bar}>
+                <button type="button" style={footerStyle.ghost} onClick={()=>setCurrent(4)}>이전</button>
+                <button type="button" style={footerStyle.primary} onClick={()=>setCurrent(6)}>
+                  <span>파일 받기</span><span aria-hidden style={{ marginLeft: 8 }}>→</span>
+                </button>
+              </footer>
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={shell.page}>
+        <div style={shell.frame}>
+          <StepRail current={current} onSelect={setCurrent} />
+          <main style={shell.content}>
+            {briefLoading && (
+              <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, borderRadius: 14 }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid #d3d6d2', borderTopColor: '#2BB8C9', animation: 'spin 0.8s linear infinite' }} />
+                <span style={{ fontSize: 13.5, color: '#5a5e5a', fontWeight: 500 }}>요청 내용을 분석해 자동 기입 중입니다… (10~20초)</span>
+              </div>
+            )}
+            <div style={{ ...shell.scroll, filter: briefLoading ? 'blur(2px)' : 'none', transition: 'filter 150ms ease' }}>
+              {/* header */}
+              <header style={{ marginBottom: 18 }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>
+                  {current}단계 — {STEPS[current-1].title === '내용 확인' ? '요청 내용 확인' : STEPS[current-1].title}
+                </h1>
+                <p style={{ margin: '8px 0 0', color: '#6b6f6e', fontSize: 13.5, lineHeight: 1.6 }}>
+                  상담 내용에서 정리한 요청입니다. 고칠 부분이 있으면 수정하세요. 수정한 내용대로 시안을 만듭니다.
+                </p>
+                <div style={{ marginTop: 12 }}>
+                  <AccuracyBadge level={accuracy} />
+                </div>
+              </header>
+
+              {/* form grid */}
+              <section style={form.grid} onBlur={()=>setAccuracy(assessNow())}>
+                <Field label="브랜드명 (한글)">
+                  <TextInput value={brandKo} onChange={(e)=>handleBrandKoEdit(e.target.value)} />
+                </Field>
+                <Field label="브랜드명 (영문)">
+                  <TextInput value={brandEn} onChange={(e)=>setBrandEn(e.target.value)} />
+                </Field>
+
+                <Field label="업종">
+                  <TextInput value={industry} onChange={(e)=>setIndustry(e.target.value)} />
+                </Field>
+                <Field label="대상 고객">
+                  <TextInput value={audience} onChange={(e)=>setAudience(e.target.value)} />
+                </Field>
+
+                <Field span={2} label="핵심 모티프 (쉼표로 구분)">
+                  <TextInput value={motif} onChange={(e)=>setMotif(e.target.value)} />
+                  <ChipRowOutlined items={motifChips} onRemove={(idx)=>setMotif(motifChips.filter((_,i)=>i!==idx).join(', '))} />
+                </Field>
+
+                <Field span={2} label="분위기 (쉼표로 구분)">
+                  <TextInput value={mood} onChange={(e)=>setMood(e.target.value)} />
+                  <ChipRowOutlined items={moodChips} onRemove={(idx)=>setMood(moodChips.filter((_,i)=>i!==idx).join(', '))} />
+                </Field>
+
+                <Field span={2} label="스타일 (쉼표로 구분)">
+                  <TextInput value={style} onChange={(e)=>setStyleStr(e.target.value)} />
+                </Field>
+
+                <Field label="주요 색상">
+                  <ColorField value={primary} onChange={setPrimary} />
+                </Field>
+                <Field label="보조 색상">
+                  <ColorField value={secondary} onChange={setSecondary} />
+                </Field>
+
+                <Field span={2} label="구체적 표현 방향">
+                  <BulletList value={directions} onChange={setDirections} />
+                </Field>
+              </section>
+
+              {/* avoid section */}
+              <section style={{ marginTop: 28 }}>
+                <h2 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: '#2a2c2c' }}>피해야 할 것</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', rowGap: 12 }}>
+                  <AvoidRow label="모티브"     value={avoidMotif} onChange={setAvoidMotif} />
+                  <AvoidRow label="컬러"       value={avoidColor} onChange={setAvoidColor} />
+                  <AvoidRow label="스타일"     value={avoidStyle} onChange={setAvoidStyle} />
+                  <AvoidRow label="참고 대상"  value={avoidRef}   onChange={setAvoidRef} />
+                </div>
+              </section>
+
+              {/* info banner */}
+              <div style={{
+                marginTop: 26,
+                background: 'var(--info-bg)',
+                color: '#5a5e5a',
+                borderRadius: 10,
+                padding: '12px 16px',
+                fontSize: 13,
+                lineHeight: 1.6,
+              }}>
+                이 단계에서는 <strong style={{ color: '#2a2c2c', fontWeight: 700 }}>글자 없는 심볼(그림)</strong>만 만듭니다. 브랜드명 글자는 다음 단계에서 합칩니다.
+              </div>
+
+              <div style={{ height: 88 }} />
+            </div>
+
+            {/* footer (sticky) */}
+            <footer style={footerStyle.bar}>
+              <button type="button" style={footerStyle.ghost}
+                onClick={()=>setCurrent(Math.max(1, current - 1))}>
+                이전
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {current === 2 && (
+                  <button type="button" style={footerStyle.ghost} onClick={regenBrief}>
+                    <span aria-hidden style={{ marginRight: 6 }}>↺</span>다시 생성
+                  </button>
+                )}
+                <button type="button" style={footerStyle.primary}
+                  onClick={()=>setCurrent(Math.min(STEPS.length, current + 1))}>
+                  <span>{current === 2 ? '1차 시안 생성' : `${current+1}단계로`}</span>
+                  <span aria-hidden style={{ marginLeft: 8 }}>→</span>
+                </button>
+              </div>
+            </footer>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  const shell = {
+    page: {
+      minHeight: '100vh',
+      display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+      padding: '24px',
+      background: 'var(--bg)',
+    },
+    frame: {
+      width: 'min(1200px, 100%)',
+      minHeight: 'calc(100vh - 48px)',
+      display: 'flex',
+      background: 'var(--bg)',
+      borderRadius: 16,
+      overflow: 'hidden',
+    },
+    content: {
+      flex: 1, minWidth: 0,
+      background: '#fff',
+      border: '1px solid var(--line-2)',
+      borderRadius: 14,
+      margin: '24px 24px 24px 0',
+      display: 'flex', flexDirection: 'column',
+      minHeight: 'calc(100vh - 96px)',
+      maxHeight: 'calc(100vh - 48px)',
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    scroll: {
+      flex: 1, minHeight: 0, overflowY: 'auto',
+      padding: '32px 36px 24px',
+    },
+  };
+
+  const form = {
+    grid: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      columnGap: 24, rowGap: 18,
+      marginTop: 10,
+    },
+  };
+
+  const footerStyle = {
+    bar: {
+      borderTop: '1px solid var(--line-2)',
+      padding: '14px 36px',
+      background: '#fff',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    },
+    ghost: {
+      padding: '10px 22px',
+      background: '#fff',
+      border: '1px solid #c9ccc7',
+      borderRadius: 8,
+      fontSize: 14, fontWeight: 500, color: '#2a2c2c',
+      cursor: 'pointer',
+    },
+    primary: {
+      padding: '10px 18px',
+      background: '#111212',
+      color: '#fff',
+      border: '1px solid #111212',
+      borderRadius: 8,
+      fontSize: 14, fontWeight: 600,
+      cursor: 'pointer',
+      display: 'inline-flex', alignItems: 'center',
+    },
+  };
+
+  /* expose shared atoms for step4.jsx (loaded as a separate babel script) */
+  Object.assign(window, { StepRail, Check, shell, footerStyle, CANDIDATES, LogoA, LogoB, LogoC, LogoD });
+
+  /* Lazy wrapper — step4.jsx assigns window.Step4View when it runs */
+  function Step4Mount(props){
+    const Cmp = window.Step4View;
+    if (!Cmp) return <div style={{ padding: 40, color: '#7a7e79' }}>곧…</div>;
+    return <Cmp {...props} />;
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+
+  <script type="text/babel" data-presets="react" src="step4.jsx"></script>
+  <script type="text/babel" data-presets="react" src="step4editor.jsx"></script>
+  <script type="text/babel" data-presets="react" src="step4mockup.jsx"></script>
+  <script type="text/babel" data-presets="react" src="step5proposal.jsx"></script>
+</body>
+</html>
