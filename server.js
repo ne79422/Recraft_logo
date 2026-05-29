@@ -59,7 +59,7 @@ function buildBody(prompt, brief) {
     size: "1024x1024",
     n: 1,
   };
-  if (colors.length) body.controls = { colors };
+  if (colors.length) body.controls = { colors, background_color: { rgb: [255, 255, 255] } };
   return body;
 }
 
