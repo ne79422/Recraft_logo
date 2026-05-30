@@ -1032,7 +1032,7 @@ ${genPrompt.trim()}</사용자_추가_요청>` : '',
               secondaryHex: (secondary && secondary.hex) || '',
               userPrompt: (genPrompt || '').trim(),
               refColors: [...new Set(palettes)].slice(0, 6),
-              variantKeys: ['A','B','C','D'], // 4개 시안 모두 생성
+              variantKeys: ['A'], // ★ 임시: A 1개만 생성 (테스트용, 나중에 ['A','B','C','D']로)
             };
             const res = await Promise.race([
               fetch(apiUrl.trim().replace(/\/$/, '') + '/api/generate-logos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
