@@ -34,13 +34,13 @@ function hexToRgb(hex) {
 // ★ 개선 #5: 부정문 범벅 긴 단락 대신, style이 벡터 룩을 책임지고 프롬프트는 핵심 의미만
 function buildPrompt(b, key) {
   return [
-    "Professional-grade, high-quality logo symbol.",
+    "Professional-grade, high-quality, premium brand logo symbol mark.",
     `Concept: ${b.motif || b.brandConcept || "a clean modern premium brand"}.`,
     b.direction ? `${b.direction}.` : "",
     // ★ 시안별 형태 차별화를 최우선으로
     `DESIGN APPROACH (most important — shape must follow this): ${VARIANTS[key]}`,
-    "One dark color on a plain solid white background, lots of empty negative space, small centered mark, clean and premium.",
-    "No text, no letters, no numbers. Not a solid filled shape, not a dark/black background.",
+    "Polished and sophisticated, elegant smooth gradients and subtle dimensional depth, refined dynamic flowing composition, sleek and modern, dark tones on a clean white background, balanced negative space, centered.",
+    "No text, no letters, no numbers, no wordmark.",
     b.userPrompt ? `${b.userPrompt}.` : "",
   ].filter(Boolean).join(" ");
 }
